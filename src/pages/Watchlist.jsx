@@ -241,7 +241,7 @@ export default function Watchlist({ user }) {
                     overflow: "hidden",
                     textOverflow: "ellipsis"
                   }}>
-                    {drama.year_released || "Year unknown"}
+                    {drama.year_watched || drama.year_released || "Year unknown"}
                   </p>
                 </div>
               </div>
