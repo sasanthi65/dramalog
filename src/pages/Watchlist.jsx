@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDramas, signOut } from "../lib/supabase";
+import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
 import DramaDetailModal from "../components/DramaDetailModal";
 
@@ -23,6 +23,46 @@ export default function Watchlist({ user }) {
       setDramas(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchMissingPosters = async (dramasList, userId) => {
+    const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+
+    console.log(`🎬 Fetching posters for ${dramasList.length} dramas...`);
+
+    let updated = 0;
+
+    for (const drama of dramasList) {
+      if (drama.poster_url) continue; // Skip if already has poster
+
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(drama.title)}&language=en-US`
+        );
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+          const result = data.results[0];
+          const posterUrl = result.poster_path
+            ? `https://image.tmdb.org/t/p/w500${result.poster_path}`
+            : null;
+
+          if (posterUrl) {
+            await updateDrama(drama.id, { poster_url: posterUrl });
+            console.log(`✅ ${drama.title}`);
+            updated++;
+          }
+        }
+
+        // Delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (err) {
+        console.error(`Error: ${drama.title}`, err);
+      }
+    }
+
+    console.log(`✨ Updated ${updated} posters!`);
+    return updated;
   };
 
   const filteredDramas = dramas.filter(d => {
@@ -141,6 +181,32 @@ export default function Watchlist({ user }) {
           >
             + Add Drama
           </button>
+          <button
+            onClick={async () => {
+              const dramasWithoutPosters = dramas.filter(d => !d.poster_url);
+              if (dramasWithoutPosters.length === 0) {
+                alert('All dramas have posters! ✨');
+                return;
+              }
+              const count = await fetchMissingPosters(dramasWithoutPosters, user.id);
+              loadDramas(); // Reload to see updates
+            }}
+            style={{
+              background: "#FFC107",
+              color: "#333",
+              border: "none",
+              padding: "10px 16px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "600",
+              transition: "opacity 0.2s"
+            }}
+            onMouseEnter={(e) => e.target.style.opacity = "0.8"}
+            onMouseLeave={(e) => e.target.style.opacity = "1"}
+          >
+            🎬 Fetch posters
+          </button>
         </div>
 
         {/* Drama grid */}
@@ -241,7 +307,7 @@ export default function Watchlist({ user }) {
                     overflow: "hidden",
                     textOverflow: "ellipsis"
                   }}>
-                    {drama.year_released || "Year unknown"}
+                    {drama.year_watched || drama.year_released || "Year unknown"}
                   </p>
                 </div>
               </div>
