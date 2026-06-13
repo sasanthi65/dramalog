@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
-import DramaDetailModal from "../components/DramaDetailModal";
+import DramaDetailModal from "../components/DramaDetailModal_UPGRADED";
 
 export default function Watchlist({ user }) {
   const navigate = useNavigate();
