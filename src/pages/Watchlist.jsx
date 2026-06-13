@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
@@ -12,20 +12,34 @@ export default function Watchlist({ user }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
-  useEffect(() => {
-    loadDramas();
-  }, [user]);
+  const fetchUserDramas = useCallback(() => getDramas(user.id), [user.id]);
 
-  const loadDramas = async () => {
-    setLoading(true);
-    const { data, error } = await getDramas(user.id);
+  const loadDramas = useCallback(async () => {
+    const { data, error } = await fetchUserDramas();
     if (!error) {
       setDramas(data || []);
     }
     setLoading(false);
-  };
+  }, [fetchUserDramas]);
 
-  const fetchMissingPosters = async (dramasList, userId) => {
+  useEffect(() => {
+    let isActive = true;
+
+    fetchUserDramas().then(({ data, error }) => {
+      if (!isActive) return;
+
+      if (!error) {
+        setDramas(data || []);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [fetchUserDramas]);
+
+  const fetchMissingPosters = async (dramasList) => {
     const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
     console.log(`🎬 Fetching posters for ${dramasList.length} dramas...`);
@@ -188,7 +202,7 @@ export default function Watchlist({ user }) {
                 alert('All dramas have posters! ✨');
                 return;
               }
-              const count = await fetchMissingPosters(dramasWithoutPosters, user.id);
+              await fetchMissingPosters(dramasWithoutPosters);
               loadDramas(); // Reload to see updates
             }}
             style={{
