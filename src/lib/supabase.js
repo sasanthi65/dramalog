@@ -35,6 +35,7 @@ export const getDramas = async () => {
   const { data, error } = await supabase
     .from("dramas")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   return { data, error };
 };

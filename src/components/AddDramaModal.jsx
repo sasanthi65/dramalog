@@ -138,6 +138,7 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
           <h2 style={{ fontSize: "20px", fontWeight: "600", margin: "0" }}>Add Drama</h2>
           <button
             onClick={onClose}
+            aria-label="Close add drama modal"
             style={{
               background: "none",
               border: "none",
@@ -336,8 +337,9 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
+                <label htmlFor="add-drama-rating" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
                 <input
+                  id="add-drama-rating"
                   type="number"
                   min="1"
                   max="10"
@@ -357,8 +359,9 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Review</label>
+                <label htmlFor="add-drama-review" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Review</label>
                 <textarea
+                  id="add-drama-review"
                   value={review}
                   onChange={(e) => setReview(e.target.value)}
                   placeholder="Add your thoughts..."

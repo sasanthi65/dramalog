@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
@@ -217,6 +217,7 @@ export default function Watchlist({ user, showToast }) {
                 alert('All dramas have posters! ✨');
                 return;
               }
+              await fetchMissingPosters(dramasWithoutPosters);
               await fetchMissingPosters(dramasWithoutPosters);
               loadDramas(); // Reload to see updates
             }}
