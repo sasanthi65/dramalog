@@ -38,7 +38,7 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
       } else {
         setError("No dramas found. Try a different search.");
       }
-    } catch (err) {
+    } catch {
       setError("Error searching TMDB. Please try again.");
     }
 
@@ -185,7 +185,11 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
                     opacity: loading ? 0.7 : 1
                   }}
                 >
-                  {loading ? "..." : "Search"}
+                  {loading ? (
+                    <span>🔍 Searching...</span>
+                  ) : (
+                    <span>Search</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -418,7 +422,11 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
                     opacity: submitting ? 0.7 : 1
                   }}
                 >
-                  {submitting ? "Adding..." : "Add to watchlist"}
+                  {submitting ? (
+                    <span>⏳ Adding...</span>
+                  ) : (
+                    <span>Add to watchlist</span>
+                  )}
                 </button>
               </div>
             </div>

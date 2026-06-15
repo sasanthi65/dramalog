@@ -31,7 +31,7 @@ export const getCurrentUser = async () => {
 };
 
 // Drama helpers
-export const getDramas = async (userId) => {
+export const getDramas = async () => {
   const { data, error } = await supabase
     .from("dramas")
     .select("*")
