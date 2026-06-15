@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { signUp } from "../lib/supabase";
 
-export default function Signup() {
+export default function Signup({ showToast }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -17,18 +17,21 @@ export default function Signup() {
 
     if (!email || !password || !confirmPassword) {
       setError("Please fill in all fields");
+      showToast("Please fill in all fields", "error");
       setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      showToast("Passwords do not match", "error");
       setLoading(false);
       return;
     }
 
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
+      showToast("Password must be at least 6 characters", "error");
       setLoading(false);
       return;
     }
@@ -37,8 +40,10 @@ export default function Signup() {
 
     if (authError) {
       setError(authError.message);
+      showToast(`Signup failed: ${authError.message}`, "error");
       setLoading(false);
     } else {
+      showToast("Account created! Please log in.", "success");
       navigate("/login");
     }
   };

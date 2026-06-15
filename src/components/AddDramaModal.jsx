@@ -38,7 +38,7 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
       } else {
         setError("No dramas found. Try a different search.");
       }
-    } catch (err) {
+    } catch {
       setError("Error searching TMDB. Please try again.");
     }
 
@@ -138,6 +138,7 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
           <h2 style={{ fontSize: "20px", fontWeight: "600", margin: "0" }}>Add Drama</h2>
           <button
             onClick={onClose}
+            aria-label="Close add drama modal"
             style={{
               background: "none",
               border: "none",
@@ -185,7 +186,11 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
                     opacity: loading ? 0.7 : 1
                   }}
                 >
-                  {loading ? "..." : "Search"}
+                  {loading ? (
+                    <span>🔍 Searching...</span>
+                  ) : (
+                    <span>Search</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -332,8 +337,9 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
+                <label htmlFor="add-drama-rating" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
                 <input
+                  id="add-drama-rating"
                   type="number"
                   min="1"
                   max="10"
@@ -353,8 +359,9 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Review</label>
+                <label htmlFor="add-drama-review" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Review</label>
                 <textarea
+                  id="add-drama-review"
                   value={review}
                   onChange={(e) => setReview(e.target.value)}
                   placeholder="Add your thoughts..."
@@ -418,7 +425,11 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
                     opacity: submitting ? 0.7 : 1
                   }}
                 >
-                  {submitting ? "Adding..." : "Add to watchlist"}
+                  {submitting ? (
+                    <span>⏳ Adding...</span>
+                  ) : (
+                    <span>Add to watchlist</span>
+                  )}
                 </button>
               </div>
             </div>

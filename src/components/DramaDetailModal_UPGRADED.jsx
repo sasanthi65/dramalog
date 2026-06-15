@@ -105,8 +105,7 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
   };
 
   const handleDelete = async () => {
-    const title = drama.title;
-    if (!window.confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) return;
+    if (!window.confirm("Are you sure you want to delete this drama?")) return;
 
     setSubmitting(true);
     const { error: deleteError } = await deleteDrama(drama.id);
@@ -155,6 +154,7 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close drama detail modal"
             style={{
               background: "none",
               border: "none",
@@ -311,11 +311,7 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
                     opacity: searching ? 0.7 : 1
                   }}
                 >
-                  {searching ? (
-                    <span>🔍 Searching...</span>
-                  ) : (
-                    <span>Search</span>
-                  )}
+                  {searching ? "..." : "Search"}
                 </button>
               </div>
             </form>
@@ -468,8 +464,9 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Title</label>
+                <label htmlFor="edit-drama-title" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Title</label>
                 <input
+                  id="edit-drama-title"
                   type="text"
                   value={editData.title}
                   onChange={(e) => setEditData({ ...editData, title: e.target.value })}
@@ -568,8 +565,9 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
+                <label htmlFor="edit-drama-rating" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
                 <input
+                  id="edit-drama-rating"
                   type="number"
                   min="1"
                   max="10"
@@ -674,11 +672,7 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
                     opacity: submitting ? 0.7 : 1
                   }}
                 >
-                  {submitting ? (
-                    <span>⏳ Saving...</span>
-                  ) : (
-                    <span>Save changes</span>
-                  )}
+                  {submitting ? "Saving..." : "Save changes"}
                 </button>
               </div>
             </div>

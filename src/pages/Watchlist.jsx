@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
-import DramaDetailModal from "../components/DramaDetailModal_UPGRADED";
+import DramaDetailModal from "../components/DramaDetailModal";
 
-export default function Watchlist({ user }) {
+export default function Watchlist({ user, showToast }) {
   const navigate = useNavigate();
   const [dramas, setDramas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,20 +12,44 @@ export default function Watchlist({ user }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
-  useEffect(() => {
-    loadDramas();
-  }, [user]);
+  const userId = user?.id;
 
   const loadDramas = async () => {
+    if (!userId) return;
+
     setLoading(true);
-    const { data, error } = await getDramas(user.id);
+    const { data, error } = await getDramas(userId);
     if (!error) {
       setDramas(data || []);
+    } else {
+      showToast("Failed to load dramas", "error");
     }
     setLoading(false);
   };
 
-  const fetchMissingPosters = async (dramasList, userId) => {
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadInitialDramas = async () => {
+      if (!userId) return;
+
+      const { data, error } = await getDramas(userId);
+      if (!isCurrent) return;
+
+      if (!error) {
+        setDramas(data || []);
+      }
+      setLoading(false);
+    };
+
+    loadInitialDramas();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [userId]);
+
+  const fetchMissingPosters = async (dramasList) => {
     const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
     console.log(`🎬 Fetching posters for ${dramasList.length} dramas...`);
@@ -72,22 +96,27 @@ export default function Watchlist({ user }) {
 
   const handleLogout = async () => {
     await signOut();
+    showToast("Logged out successfully", "info");
     navigate("/login");
   };
 
   const handleDramaAdded = (newDrama) => {
-    setDramas([newDrama, ...dramas]);
+    setDramas(currentDramas => [newDrama, ...currentDramas]);
     setShowAddModal(false);
+    showToast(`Added "${newDrama.title}" to watchlist!`, "success");
   };
 
   const handleDramaUpdated = (updatedDrama) => {
-    setDramas(dramas.map(d => d.id === updatedDrama.id ? updatedDrama : d));
+    setDramas(currentDramas => currentDramas.map(d => d.id === updatedDrama.id ? updatedDrama : d));
     setSelectedDrama(null);
+    showToast("Drama updated successfully!", "success");
   };
 
   const handleDramaDeleted = (dramaId) => {
-    setDramas(dramas.filter(d => d.id !== dramaId));
+    const deletedTitle = dramas.find(d => d.id === dramaId)?.title;
+    setDramas(currentDramas => currentDramas.filter(d => d.id !== dramaId));
     setSelectedDrama(null);
+    showToast(`Deleted "${deletedTitle}"`, "info");
   };
 
   return (
@@ -188,7 +217,8 @@ export default function Watchlist({ user }) {
                 alert('All dramas have posters! ✨');
                 return;
               }
-              const count = await fetchMissingPosters(dramasWithoutPosters, user.id);
+              await fetchMissingPosters(dramasWithoutPosters);
+              await fetchMissingPosters(dramasWithoutPosters);
               loadDramas(); // Reload to see updates
             }}
             style={{
@@ -211,8 +241,23 @@ export default function Watchlist({ user }) {
 
         {/* Drama grid */}
         {loading ? (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#999" }}>
-            <p style={{ fontSize: "16px" }}>Loading your dramas...</p>
+          <div style={{ textAlign: "center", padding: "60px 20px" }}>
+            <div style={{
+              display: "inline-block",
+              width: "40px",
+              height: "40px",
+              border: "4px solid #f0f0f0",
+              borderTop: "4px solid #667eea",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite"
+            }} />
+            <p style={{ fontSize: "16px", color: "#999", marginTop: "16px" }}>Loading your dramas...</p>
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
         ) : filteredDramas.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px", color: "#999" }}>

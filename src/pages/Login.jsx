@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { signIn } from "../lib/supabase";
 
-export default function Login() {
+export default function Login({ showToast }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -16,6 +16,7 @@ export default function Login() {
 
     if (!email || !password) {
       setError("Please fill in all fields");
+      showToast("Please fill in all fields", "error");
       setLoading(false);
       return;
     }
@@ -24,8 +25,10 @@ export default function Login() {
 
     if (authError) {
       setError(authError.message);
+      showToast(`Login failed: ${authError.message}`, "error");
       setLoading(false);
     } else {
+      showToast("Login successful! Welcome back.", "success");
       navigate("/watchlist");
     }
   };
