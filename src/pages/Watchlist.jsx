@@ -31,13 +31,19 @@ export default function Watchlist({ user, showToast }) {
     let isCurrent = true;
 
     const loadInitialDramas = async () => {
-      if (!userId) return;
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
 
+      setLoading(true);
       const { data, error } = await getDramas(userId);
       if (!isCurrent) return;
 
       if (!error) {
         setDramas(data || []);
+      } else {
+        showToast("Failed to load dramas", "error");
       }
       setLoading(false);
     };
@@ -47,7 +53,7 @@ export default function Watchlist({ user, showToast }) {
     return () => {
       isCurrent = false;
     };
-  }, [userId]);
+  }, [userId, showToast]);
 
   const fetchMissingPosters = async (dramasList) => {
     const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -153,7 +159,8 @@ export default function Watchlist({ user, showToast }) {
             fontWeight: "500",
             transition: "background 0.2s"
           }}
-          onHover={(e) => e.target.style.background = "rgba(255,255,255,0.3"}
+          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
         >
           Log out
         </button>

@@ -31,11 +31,17 @@ export const getCurrentUser = async () => {
 };
 
 // Drama helpers
-export const getDramas = async () => {
+export const getDramas = async (userId) => {
+  if (!userId) {
+    return {
+      data: [],
+      error: new Error("Missing userId for getDramas")
+    };
+  }
+
   const { data, error } = await supabase
     .from("dramas")
     .select("*")
-    .eq("user_id", userId)
     .order("created_at", { ascending: false });
   return { data, error };
 };
