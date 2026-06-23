@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
@@ -12,13 +12,9 @@ export default function Watchlist({ user, showToast }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
-  const userId = user?.id;
-
   const loadDramas = async () => {
-    if (!userId) return;
-
     setLoading(true);
-    const { data, error } = await getDramas(userId);
+    const { data, error } = await getDramas();
     if (!error) {
       setDramas(data || []);
     } else {
@@ -31,13 +27,9 @@ export default function Watchlist({ user, showToast }) {
     let isCurrent = true;
 
     const loadInitialDramas = async () => {
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
-      const { data, error } = await getDramas(userId);
+      const { data, error } = await getDramas();
+      
       if (!isCurrent) return;
 
       if (!error) {
@@ -53,7 +45,7 @@ export default function Watchlist({ user, showToast }) {
     return () => {
       isCurrent = false;
     };
-  }, [userId, showToast]);
+  }, [showToast]);
 
   const fetchMissingPosters = async (dramasList) => {
     const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -221,11 +213,12 @@ export default function Watchlist({ user, showToast }) {
             onClick={async () => {
               const dramasWithoutPosters = dramas.filter(d => !d.poster_url);
               if (dramasWithoutPosters.length === 0) {
-                alert('All dramas have posters! ✨');
+                showToast('All dramas have posters! ✨', 'info');
                 return;
               }
+              showToast('Fetching posters...', 'info');
               await fetchMissingPosters(dramasWithoutPosters);
-              await fetchMissingPosters(dramasWithoutPosters);
+              showToast('Posters fetched! Refreshing...', 'success');
               loadDramas(); // Reload to see updates
             }}
             style={{
