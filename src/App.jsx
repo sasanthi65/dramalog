@@ -5,6 +5,7 @@ import { useToast } from "./hooks/useToast";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Watchlist from "./pages/Watchlist";
+import Analytics from "./pages/Analytics";
 import Toast from "./components/Toast";
 import "./main.css";
 
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/login" element={user ? <Navigate to="/watchlist" /> : <Login showToast={showToast} />} />
         <Route path="/signup" element={user ? <Navigate to="/watchlist" /> : <Signup showToast={showToast} />} />
         <Route path="/watchlist" element={user ? <Watchlist user={user} showToast={showToast} /> : <Navigate to="/login" />} />
+        <Route path="/analytics" element={user ? <Analytics user={user} showToast={showToast} /> : <Navigate to="/login" />} />
         <Route path="/" element={<Navigate to={user ? "/watchlist" : "/login"} />} />
       </Routes>
 

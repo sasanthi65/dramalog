@@ -31,14 +31,8 @@ export const getCurrentUser = async () => {
 };
 
 // Drama helpers
-export const getDramas = async (userId) => {
-  if (!userId) {
-    return {
-      data: [],
-      error: new Error("Missing userId for getDramas")
-    };
-  }
-
+// Drama helpers
+export const getDramas = async () => {
   const { data, error } = await supabase
     .from("dramas")
     .select("*")

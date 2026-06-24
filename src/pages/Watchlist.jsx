@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut, updateDrama } from "../lib/supabase";
 import AddDramaModal from "../components/AddDramaModal";
@@ -12,13 +12,9 @@ export default function Watchlist({ user, showToast }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
-  const userId = user?.id;
-
   const loadDramas = async () => {
-    if (!userId) return;
-
     setLoading(true);
-    const { data, error } = await getDramas(userId);
+    const { data, error } = await getDramas();
     if (!error) {
       setDramas(data || []);
     } else {
@@ -31,13 +27,9 @@ export default function Watchlist({ user, showToast }) {
     let isCurrent = true;
 
     const loadInitialDramas = async () => {
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
-      const { data, error } = await getDramas(userId);
+      const { data, error } = await getDramas();
+      
       if (!isCurrent) return;
 
       if (!error) {
@@ -53,7 +45,7 @@ export default function Watchlist({ user, showToast }) {
     return () => {
       isCurrent = false;
     };
-  }, [userId, showToast]);
+  }, [showToast]);
 
   const fetchMissingPosters = async (dramasList) => {
     const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -63,7 +55,7 @@ export default function Watchlist({ user, showToast }) {
     let updated = 0;
 
     for (const drama of dramasList) {
-      if (drama.poster_url) continue; // Skip if already has poster
+      if (drama.poster_url) continue;
 
       try {
         const response = await fetch(
@@ -84,7 +76,6 @@ export default function Watchlist({ user, showToast }) {
           }
         }
 
-        // Delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 300));
       } catch (err) {
         console.error(`Error: ${drama.title}`, err);
@@ -113,7 +104,9 @@ export default function Watchlist({ user, showToast }) {
   };
 
   const handleDramaUpdated = (updatedDrama) => {
-    setDramas(currentDramas => currentDramas.map(d => d.id === updatedDrama.id ? updatedDrama : d));
+    setDramas(currentDramas => 
+      currentDramas.map(d => d.id === updatedDrama.id ? updatedDrama : d)
+    );
     setSelectedDrama(null);
     showToast("Drama updated successfully!", "success");
   };
@@ -146,24 +139,44 @@ export default function Watchlist({ user, showToast }) {
             {user.email}
           </p>
         </div>
-        <button
-          onClick={handleLogout}
-          style={{
-            background: "rgba(255,255,255,0.2)",
-            color: "white",
-            border: "1px solid rgba(255,255,255,0.4)",
-            padding: "8px 16px",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontSize: "13px",
-            fontWeight: "500",
-            transition: "background 0.2s"
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
-          onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
-        >
-          Log out
-        </button>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <button
+            onClick={() => navigate("/analytics")}
+            style={{
+              background: "rgba(255,255,255,0.2)",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.4)",
+              padding: "8px 16px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "500",
+              transition: "background 0.2s"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
+          >
+            📊 Analytics
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "rgba(255,255,255,0.2)",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.4)",
+              padding: "8px 16px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "500",
+              transition: "background 0.2s"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
+          >
+            Log out
+          </button>
+        </div>
       </div>
 
       {/* Main content */}
@@ -221,12 +234,13 @@ export default function Watchlist({ user, showToast }) {
             onClick={async () => {
               const dramasWithoutPosters = dramas.filter(d => !d.poster_url);
               if (dramasWithoutPosters.length === 0) {
-                alert('All dramas have posters! ✨');
+                showToast('All dramas have posters! ✨', 'info');
                 return;
               }
+              showToast('Fetching posters...', 'info');
               await fetchMissingPosters(dramasWithoutPosters);
-              await fetchMissingPosters(dramasWithoutPosters);
-              loadDramas(); // Reload to see updates
+              showToast('Posters fetched! Refreshing...', 'success');
+              loadDramas();
             }}
             style={{
               background: "#FFC107",
