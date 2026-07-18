@@ -9,6 +9,7 @@ export default function Watchlist({ user, showToast }) {
   const [dramas, setDramas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
@@ -87,8 +88,12 @@ export default function Watchlist({ user, showToast }) {
   };
 
   const filteredDramas = dramas.filter(d => {
-    if (filter === "all") return true;
-    return d.status === filter;
+    const matchesStatus = filter === "all" ? true : d.status === filter;
+    const query = searchQuery.trim().toLowerCase();
+    const searchableText = `${d.title || ""} ${d.year_watched || ""} ${d.year_released || ""}`.toLowerCase();
+    const matchesSearch = !query || searchableText.includes(query);
+
+    return matchesStatus && matchesSearch;
   });
 
   const handleLogout = async () => {
@@ -190,8 +195,51 @@ export default function Watchlist({ user, showToast }) {
           gap: "20px",
           flexWrap: "wrap"
         }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {["all", "completed", "watching", "want_to_watch"].map(status => (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, minWidth: "280px" }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "white",
+              border: "1px solid #e5e7eb",
+              borderRadius: "10px",
+              padding: "10px 12px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+            }}>
+              <span style={{ fontSize: "14px" }}>🔎</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search dramas..."
+                style={{
+                  border: "none",
+                  outline: "none",
+                  width: "100%",
+                  fontSize: "14px",
+                  color: "#333"
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "#6b7280",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    padding: "0"
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {["all", "completed", "watching", "want_to_watch"].map(status => (
               <button
                 key={status}
                 onClick={() => setFilter(status)}
@@ -210,6 +258,7 @@ export default function Watchlist({ user, showToast }) {
                 {status === "all" ? "All" : status === "completed" ? "Watched" : status === "watching" ? "Watching" : "Want to watch"}
               </button>
             ))}
+            </div>
           </div>
 
           <button
@@ -282,7 +331,9 @@ export default function Watchlist({ user, showToast }) {
           </div>
         ) : filteredDramas.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px", color: "#999" }}>
-            <p style={{ fontSize: "16px", marginBottom: "16px" }}>No dramas yet</p>
+            <p style={{ fontSize: "16px", marginBottom: "16px" }}>
+              {searchQuery ? "No dramas match your search" : "No dramas yet"}
+            </p>
             <button
               onClick={() => setShowAddModal(true)}
               style={{
