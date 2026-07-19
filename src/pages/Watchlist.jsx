@@ -11,6 +11,7 @@ export default function Watchlist({ user, showToast }) {
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [yearSortOrder, setYearSortOrder] = useState("default");
+  const [yearFilter, setYearFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
@@ -102,8 +103,10 @@ export default function Watchlist({ user, showToast }) {
       const query = searchQuery.trim().toLowerCase();
       const searchableText = `${d.title || ""} ${d.year_watched || ""} ${d.year_released || ""}`.toLowerCase();
       const matchesSearch = !query || searchableText.includes(query);
+      const dramaYear = getYearValue(d);
+      const matchesYear = yearFilter === "all" ? true : dramaYear === Number(yearFilter);
 
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesSearch && matchesYear;
     })
     .sort((a, b) => {
       const yearA = getYearValue(a);
@@ -284,6 +287,30 @@ export default function Watchlist({ user, showToast }) {
               ))}
               <label style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "4px", fontSize: "13px", color: "#4b5563" }}>
                 <span>📅</span>
+                <select
+                  aria-label="Filter by year watched"
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    fontSize: "13px",
+                    color: "#333",
+                    background: "white"
+                  }}
+                >
+                  <option value="all">All years</option>
+                  <option value="2020">2020</option>
+                  <option value="2021">2021</option>
+                  <option value="2022">2022</option>
+                  <option value="2023">2023</option>
+                  <option value="2024">2024</option>
+                  <option value="2025">2025</option>
+                </select>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "4px", fontSize: "13px", color: "#4b5563" }}>
+                <span>🔀</span>
                 <select
                   aria-label="Sort by year watched"
                   value={yearSortOrder}

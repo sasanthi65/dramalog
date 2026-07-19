@@ -37,6 +37,7 @@ describe("Watchlist", () => {
       data: [
         { id: "1", title: "Lovely Runner", status: "watching", year_watched: 2024 },
         { id: "2", title: "Crash Landing on You", status: "completed", year_watched: 2020 },
+        { id: "3", title: "The Glory", status: "completed", year_watched: 2023 },
       ],
       error: null,
     });
@@ -65,7 +66,21 @@ describe("Watchlist", () => {
       target: { value: "newest" },
     });
 
-    const dramaCards = screen.getAllByText(/Lovely Runner|Crash Landing on You/).map((node) => node.textContent);
+    const dramaCards = screen.getAllByText(/Lovely Runner|Crash Landing on You|The Glory/).map((node) => node.textContent);
     expect(dramaCards[0]).toBe("Lovely Runner");
+  });
+
+  it("filters dramas by the selected watched year", async () => {
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by year watched"), {
+      target: { value: "2023" },
+    });
+
+    expect(screen.getByText("The Glory")).toBeInTheDocument();
+    expect(screen.queryByText("Lovely Runner")).not.toBeInTheDocument();
+    expect(screen.queryByText("Crash Landing on You")).not.toBeInTheDocument();
   });
 });
