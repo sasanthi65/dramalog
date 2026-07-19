@@ -10,6 +10,7 @@ export default function Watchlist({ user, showToast }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [yearSortOrder, setYearSortOrder] = useState("default");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
 
@@ -87,14 +88,37 @@ export default function Watchlist({ user, showToast }) {
     return updated;
   };
 
-  const filteredDramas = dramas.filter(d => {
-    const matchesStatus = filter === "all" ? true : d.status === filter;
-    const query = searchQuery.trim().toLowerCase();
-    const searchableText = `${d.title || ""} ${d.year_watched || ""} ${d.year_released || ""}`.toLowerCase();
-    const matchesSearch = !query || searchableText.includes(query);
+  const getYearValue = (drama) => {
+    const rawValue = drama.year_watched ?? drama.year_released;
+    if (!rawValue) return 0;
 
-    return matchesStatus && matchesSearch;
-  });
+    const match = String(rawValue).trim().match(/(\d{4})/);
+    return match ? Number(match[1]) : 0;
+  };
+
+  const filteredDramas = dramas
+    .filter(d => {
+      const matchesStatus = filter === "all" ? true : d.status === filter;
+      const query = searchQuery.trim().toLowerCase();
+      const searchableText = `${d.title || ""} ${d.year_watched || ""} ${d.year_released || ""}`.toLowerCase();
+      const matchesSearch = !query || searchableText.includes(query);
+
+      return matchesStatus && matchesSearch;
+    })
+    .sort((a, b) => {
+      const yearA = getYearValue(a);
+      const yearB = getYearValue(b);
+
+      if (yearSortOrder === "newest") {
+        return yearB - yearA;
+      }
+
+      if (yearSortOrder === "oldest") {
+        return yearA - yearB;
+      }
+
+      return yearA - yearB;
+    });
 
   const handleLogout = async () => {
     await signOut();
@@ -238,26 +262,46 @@ export default function Watchlist({ user, showToast }) {
                 </button>
               )}
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
               {["all", "completed", "watching", "want_to_watch"].map(status => (
-              <button
-                key={status}
-                onClick={() => setFilter(status)}
-                style={{
-                  background: filter === status ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "white",
-                  color: filter === status ? "white" : "#333",
-                  border: filter === status ? "none" : "1px solid #ddd",
-                  padding: "10px 16px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  fontWeight: "500",
-                  transition: "all 0.2s"
-                }}
-              >
-                {status === "all" ? "All" : status === "completed" ? "Watched" : status === "watching" ? "Watching" : "Want to watch"}
-              </button>
-            ))}
+                <button
+                  key={status}
+                  onClick={() => setFilter(status)}
+                  style={{
+                    background: filter === status ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "white",
+                    color: filter === status ? "white" : "#333",
+                    border: filter === status ? "none" : "1px solid #ddd",
+                    padding: "10px 16px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {status === "all" ? "All" : status === "completed" ? "Watched" : status === "watching" ? "Watching" : "Want to watch"}
+                </button>
+              ))}
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "4px", fontSize: "13px", color: "#4b5563" }}>
+                <span>📅</span>
+                <select
+                  aria-label="Sort by year watched"
+                  value={yearSortOrder}
+                  onChange={(e) => setYearSortOrder(e.target.value)}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    fontSize: "13px",
+                    color: "#333",
+                    background: "white"
+                  }}
+                >
+                  <option value="default">Default</option>
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                </select>
+              </label>
             </div>
           </div>
 

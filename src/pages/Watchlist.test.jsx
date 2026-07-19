@@ -55,4 +55,17 @@ describe("Watchlist", () => {
     expect(screen.getByText("Lovely Runner")).toBeInTheDocument();
     expect(screen.queryByText("Crash Landing on You")).not.toBeInTheDocument();
   });
+
+  it("sorts dramas by year watched when selected", async () => {
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Sort by year watched"), {
+      target: { value: "newest" },
+    });
+
+    const dramaCards = screen.getAllByText(/Lovely Runner|Crash Landing on You/).map((node) => node.textContent);
+    expect(dramaCards[0]).toBe("Lovely Runner");
+  });
 });
