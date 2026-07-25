@@ -43,6 +43,13 @@ describe("Watchlist", () => {
     });
   });
 
+  it("does not render the fetch posters button", async () => {
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /fetch posters/i })).not.toBeInTheDocument();
+  });
+
   it("filters dramas by the search query", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
