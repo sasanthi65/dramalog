@@ -58,6 +58,31 @@ export default function Watchlist({ user, showToast }) {
     return match ? Number(match[1]) : 0;
   };
 
+  const getGenreText = (drama) => {
+    if (Array.isArray(drama.genres) && drama.genres.length > 0) {
+      return drama.genres.join(", ");
+    }
+
+    if (typeof drama.genre === "string" && drama.genre.trim()) {
+      return drama.genre;
+    }
+
+    return "No genres";
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case "completed":
+        return "Completed";
+      case "watching":
+        return "Watching";
+      case "want_to_watch":
+        return "Want to watch";
+      default:
+        return "Unknown";
+    }
+  };
+
   const filteredDramas = dramas
     .filter(d => {
       const matchesStatus = filter === "all" ? true : d.status === filter;
@@ -262,6 +287,12 @@ export default function Watchlist({ user, showToast }) {
                   }}
                 >
                   <option value="all">All years</option>
+                  <option value="2014">2014</option>
+                  <option value="2015">2015</option>
+                  <option value="2016">2016</option>
+                  <option value="2017">2017</option>
+                  <option value="2018">2018</option>
+                  <option value="2019">2019</option>
                   <option value="2020">2020</option>
                   <option value="2021">2021</option>
                   <option value="2022">2022</option>
@@ -422,14 +453,39 @@ export default function Watchlist({ user, showToast }) {
                   </p>
                   <p style={{
                     fontSize: "11px",
-                    color: "#999",
-                    margin: "0",
+                    color: "#6b7280",
+                    margin: "0 0 8px",
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis"
                   }}>
-                    {drama.year_watched || drama.year_released || "Year unknown"}
+                    {getGenreText(drama)}
                   </p>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                    <p style={{
+                      fontSize: "11px",
+                      color: "#999",
+                      margin: "0",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis"
+                    }}>
+                      {drama.year_watched || drama.year_released || "Year unknown"}
+                    </p>
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "3px 8px",
+                      borderRadius: "999px",
+                      background: "#eef2ff",
+                      color: "#4f46e5",
+                      fontSize: "10px",
+                      fontWeight: "600",
+                      whiteSpace: "nowrap"
+                    }}>
+                      {getStatusLabel(drama.status)}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}

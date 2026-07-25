@@ -50,6 +50,27 @@ describe("Watchlist", () => {
     expect(screen.queryByRole("button", { name: /fetch posters/i })).not.toBeInTheDocument();
   });
 
+  it("shows genres and status badges on drama cards", async () => {
+    mockGetDramas.mockResolvedValueOnce({
+      data: [
+        {
+          id: "1",
+          title: "Lovely Runner",
+          status: "watching",
+          year_watched: 2024,
+          genres: ["Romance", "Comedy"],
+        },
+      ],
+      error: null,
+    });
+
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+    expect(screen.getByText("Romance, Comedy")).toBeInTheDocument();
+    expect(screen.getByText("Watching", { selector: "span" })).toBeInTheDocument();
+  });
+
   it("filters dramas by the search query", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
