@@ -10,10 +10,12 @@ export default function Watchlist({ user, showToast }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [yearSortOrder, setYearSortOrder] = useState("default");
+  const [sortBy, setSortBy] = useState("default");
   const [yearFilter, setYearFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDrama, setSelectedDrama] = useState(null);
+  const [featuredDramas, setFeaturedDramas] = useState([]);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
 
   const loadDramas = async () => {
     setLoading(true);
@@ -49,6 +51,49 @@ export default function Watchlist({ user, showToast }) {
       isCurrent = false;
     };
   }, [showToast]);
+
+  useEffect(() => {
+    const loadFeaturedDramas = async () => {
+      const apiKey = import.meta.env.VITE_TMDB_API_KEY;
+      if (!apiKey) return;
+
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/discover/tv?api_key=${apiKey}&language=en-US&with_original_language=ko&with_genres=18&with_type=2&sort_by=popularity.desc&page=1`
+        );
+        const data = await response.json();
+        const popularDramas = (data.results || [])
+          .filter((item) => {
+            const isKoreanOrigin = item.origin_country?.includes("KR");
+            const isKoreanLanguage = item.original_language === "ko";
+            const hasPoster = Boolean(item.poster_path);
+            return hasPoster && (isKoreanOrigin || isKoreanLanguage);
+          })
+          .slice(0, 5)
+          .map((item) => ({
+            title: item.name || item.title,
+            overview: item.overview || "Popular ongoing K-drama",
+            posterUrl: `https://image.tmdb.org/t/p/w500${item.poster_path}`,
+          }));
+
+        setFeaturedDramas(popularDramas);
+      } catch (error) {
+        console.error("Failed to load featured dramas", error);
+      }
+    };
+
+    loadFeaturedDramas();
+  }, []);
+
+  useEffect(() => {
+    if (featuredDramas.length <= 1) return;
+
+    const timer = window.setInterval(() => {
+      setFeaturedIndex((current) => (current + 1) % featuredDramas.length);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [featuredDramas.length]);
 
   const getYearValue = (drama) => {
     const rawValue = drama.year_watched ?? drama.year_released;
@@ -87,7 +132,7 @@ export default function Watchlist({ user, showToast }) {
     .filter(d => {
       const matchesStatus = filter === "all" ? true : d.status === filter;
       const query = searchQuery.trim().toLowerCase();
-      const searchableText = `${d.title || ""} ${d.year_watched || ""} ${d.year_released || ""}`.toLowerCase();
+      const searchableText = `${d.title || ""} ${d.year_watched || ""} ${d.year_released || ""} ${d.genres?.join(" ") || ""}`.toLowerCase();
       const matchesSearch = !query || searchableText.includes(query);
       const dramaYear = getYearValue(d);
       const matchesYear = yearFilter === "all" ? true : dramaYear === Number(yearFilter);
@@ -98,16 +143,52 @@ export default function Watchlist({ user, showToast }) {
       const yearA = getYearValue(a);
       const yearB = getYearValue(b);
 
-      if (yearSortOrder === "newest") {
+      if (sortBy === "title") {
+        return (a.title || "").localeCompare(b.title || "");
+      }
+
+      if (sortBy === "rating") {
+        const ratingA = Number(a.rating) || 0;
+        const ratingB = Number(b.rating) || 0;
+        return ratingB - ratingA;
+      }
+
+      if (sortBy === "newest") {
         return yearB - yearA;
       }
 
-      if (yearSortOrder === "oldest") {
+      if (sortBy === "oldest") {
         return yearA - yearB;
       }
 
       return yearA - yearB;
     });
+
+  const stats = (() => {
+    const ratedDramas = dramas.filter(d => Number(d.rating) > 0);
+    const totalRating = ratedDramas.reduce((sum, drama) => sum + Number(drama.rating || 0), 0);
+    const averageRating = ratedDramas.length > 0 ? (totalRating / ratedDramas.length).toFixed(1) : "0.0";
+
+    const genreCounts = dramas.reduce((counts, drama) => {
+      const genreList = Array.isArray(drama.genres) ? drama.genres : [];
+      genreList.forEach((genre) => {
+        const normalizedGenre = genre.trim();
+        if (normalizedGenre) {
+          counts[normalizedGenre] = (counts[normalizedGenre] || 0) + 1;
+        }
+      });
+      return counts;
+    }, {});
+
+    const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "No genres";
+
+    return {
+      total: dramas.length,
+      averageRating,
+      topGenre,
+      ratedCount: ratedDramas.length,
+    };
+  })();
 
   const handleLogout = async () => {
     await signOut();
@@ -199,6 +280,49 @@ export default function Watchlist({ user, showToast }) {
 
       {/* Main content */}
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 20px" }}>
+        {featuredDramas.length > 0 && (
+          <div style={{
+            background: "linear-gradient(135deg, #111827 0%, #1f2937 100%)",
+            color: "white",
+            borderRadius: "16px",
+            padding: "20px",
+            marginBottom: "24px",
+            boxShadow: "0 10px 30px rgba(17, 24, 39, 0.18)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "12px", color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Featured
+                </p>
+                <h2 style={{ margin: "0", fontSize: "20px" }}>Popular K-dramas</h2>
+              </div>
+              <div style={{ fontSize: "12px", color: "#cbd5e1" }}>
+                {featuredIndex + 1}/{featuredDramas.length}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+              <img
+                src={featuredDramas[featuredIndex].posterUrl}
+                alt={featuredDramas[featuredIndex].title}
+                style={{
+                  width: "120px",
+                  height: "180px",
+                  objectFit: "cover",
+                  borderRadius: "12px",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.25)"
+                }}
+              />
+              <div style={{ flex: 1, minWidth: "220px" }}>
+                <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{featuredDramas[featuredIndex].title}</h3>
+                <p style={{ margin: "0", fontSize: "13px", lineHeight: "1.5", color: "#e5e7eb" }}>
+                  {featuredDramas[featuredIndex].overview}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Controls */}
         <div style={{
           display: "flex",
@@ -304,9 +428,9 @@ export default function Watchlist({ user, showToast }) {
               <label style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "4px", fontSize: "13px", color: "#4b5563" }}>
                 <span>🔀</span>
                 <select
-                  aria-label="Sort by year watched"
-                  value={yearSortOrder}
-                  onChange={(e) => setYearSortOrder(e.target.value)}
+                  aria-label="Sort by"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
                   style={{
                     border: "1px solid #ddd",
                     borderRadius: "8px",
@@ -317,6 +441,8 @@ export default function Watchlist({ user, showToast }) {
                   }}
                 >
                   <option value="default">Default</option>
+                  <option value="title">Title</option>
+                  <option value="rating">Rating</option>
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
                 </select>
@@ -343,6 +469,39 @@ export default function Watchlist({ user, showToast }) {
             + Add Drama
           </button>
         </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "12px",
+          marginBottom: "20px"
+        }}>
+          {[
+            { label: "Total dramas", value: stats.total },
+            { label: "Avg. rating", value: `${stats.averageRating}/10` },
+            { label: "Top genre", value: stats.topGenre },
+            { label: "Rated", value: stats.ratedCount },
+          ].map((stat) => (
+            <div key={stat.label} style={{
+              background: "white",
+              border: "1px solid #e5e7eb",
+              borderRadius: "12px",
+              padding: "14px 16px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+            }}>
+              <p style={{ fontSize: "11px", color: "#6b7280", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                {stat.label}
+              </p>
+              <p style={{ fontSize: "18px", fontWeight: "700", color: "#111827", margin: "0" }}>
+                {stat.value}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <p style={{ fontSize: "13px", color: "#6b7280", margin: "0 0 20px" }}>
+          Showing {filteredDramas.length} result{filteredDramas.length === 1 ? "" : "s"}
+        </p>
 
         {/* Drama grid */}
         {loading ? (
