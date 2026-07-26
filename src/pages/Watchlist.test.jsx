@@ -71,44 +71,76 @@ describe("Watchlist", () => {
     expect(screen.getByText("Watching", { selector: "span" })).toBeInTheDocument();
   });
 
-  it("filters dramas by the search query", async () => {
+  it("shows watchlist stats summary", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
     expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
-    expect(screen.getByText("Crash Landing on You")).toBeInTheDocument();
+    expect(screen.getByText("Total dramas")).toBeInTheDocument();
+    expect(screen.getByText("Avg. rating")).toBeInTheDocument();
+  });
+
+  it("renders a featured banner for popular ongoing dramas", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            name: "Lovely Runner",
+            overview: "A charming and emotional romance.",
+            poster_path: "/poster.jpg",
+            original_language: "ko",
+            origin_country: ["KR"],
+          },
+        ],
+      }),
+    });
+
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("/discover/tv"));
+    expect(await screen.findByText("Popular K-dramas")).toBeInTheDocument();
+    expect(screen.getByText("Lovely Runner", { selector: "h3" })).toBeInTheDocument();
+  });
+
+  it("filters dramas by the search query", async () => {
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    expect(await screen.findByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("Crash Landing on You", { selector: "p" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Search dramas..."), {
       target: { value: "runner" },
     });
 
-    expect(screen.getByText("Lovely Runner")).toBeInTheDocument();
-    expect(screen.queryByText("Crash Landing on You")).not.toBeInTheDocument();
+    expect(screen.getByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
+    expect(screen.queryByText("Crash Landing on You", { selector: "p" })).not.toBeInTheDocument();
   });
 
-  it("sorts dramas by year watched when selected", async () => {
+  it("sorts dramas by title when selected", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
-    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+    expect(await screen.findByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Sort by year watched"), {
-      target: { value: "newest" },
+    fireEvent.change(screen.getByLabelText("Sort by"), {
+      target: { value: "title" },
     });
 
-    const dramaCards = screen.getAllByText(/Lovely Runner|Crash Landing on You|The Glory/).map((node) => node.textContent);
-    expect(dramaCards[0]).toBe("Lovely Runner");
+    const cardList = screen.getByText("Showing 3 results").closest("div").parentElement;
+    const dramaTitles = Array.from(cardList.querySelectorAll("p, h3")).map((node) => node.textContent).filter(Boolean);
+    expect(dramaTitles).toContain("Crash Landing on You");
   });
 
   it("filters dramas by the selected watched year", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
-    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+    expect(await screen.findByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Filter by year watched"), {
       target: { value: "2023" },
     });
 
-    expect(screen.getByText("The Glory")).toBeInTheDocument();
-    expect(screen.queryByText("Lovely Runner")).not.toBeInTheDocument();
-    expect(screen.queryByText("Crash Landing on You")).not.toBeInTheDocument();
+    expect(screen.getByText("The Glory", { selector: "p" })).toBeInTheDocument();
+    expect(screen.queryByText("Lovely Runner", { selector: "p" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Crash Landing on You", { selector: "p" })).not.toBeInTheDocument();
   });
 });
