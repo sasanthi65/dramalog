@@ -85,6 +85,7 @@ describe("Watchlist", () => {
       json: async () => ({
         results: [
           {
+            id: 12345,
             name: "Lovely Runner",
             overview: "A charming and emotional romance.",
             poster_path: "/poster.jpg",
@@ -100,6 +101,30 @@ describe("Watchlist", () => {
     expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("/discover/tv"));
     expect(await screen.findByText("Popular K-dramas")).toBeInTheDocument();
     expect(screen.getByText("Lovely Runner", { selector: "h3" })).toBeInTheDocument();
+  });
+
+  it("makes the featured banner link to the selected drama on TMDb", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            id: 12345,
+            name: "Lovely Runner",
+            overview: "A charming and emotional romance.",
+            poster_path: "/poster.jpg",
+            original_language: "ko",
+            origin_country: ["KR"],
+          },
+        ],
+      }),
+    });
+
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+
+    const link = await screen.findByRole("link", { name: /open lovely runner on tmdb/i });
+    expect(link).toHaveAttribute("href", "https://www.themoviedb.org/tv/12345");
+    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("filters dramas by the search query", async () => {
