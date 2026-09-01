@@ -1,0 +1,367 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body);
+  background: var(--background);
+  color: var(--on-background);
+}
+
+.app-shell--wrapped {
+  background: var(--wrapped-bg);
+  color: #ffffff;
+}
+
+/* ---------- Top navigation ---------- */
+
+.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--margin-md);
+  padding: 16px var(--margin-lg);
+  background: var(--primary);
+  box-shadow: 0 4px 20px rgba(24, 20, 69, 0.18);
+}
+
+.app-nav__group {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  min-width: 0;
+}
+
+.app-nav__brand {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-display-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--on-primary);
+}
+
+.app-nav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--margin-md);
+}
+
+.app-nav__links button {
+  border: none;
+  background: none;
+  padding: 0 0 4px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-body-md);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s ease;
+}
+
+.app-nav__links button:hover {
+  color: var(--on-primary);
+}
+
+.app-nav__links button.is-active {
+  color: var(--on-primary);
+  font-weight: 700;
+  border-bottom-color: var(--on-primary);
+}
+
+.app-nav__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  max-width: 320px;
+}
+
+.app-nav__search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.app-nav__search-clear {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.app-nav__search-clear:hover {
+  background: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+.app-nav__search-clear .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.app-nav__search input {
+  width: 100%;
+  padding: 10px 40px 10px 40px;
+  border: none;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.12);
+  font-family: var(--font-body);
+  font-size: var(--text-label-md);
+  color: var(--on-primary);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.app-nav__search input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.app-nav__search input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.02);
+}
+
+.app-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-nav__add {
+  padding: 10px 24px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-family: var(--font-body);
+  font-size: var(--text-label-md);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.app-nav__add:hover {
+  filter: brightness(1.05);
+}
+
+.app-nav__add:active {
+  transform: scale(0.95);
+}
+
+.app-nav__account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.app-nav__account .material-symbols-outlined {
+  font-size: 28px;
+}
+
+.app-nav__email {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-nav__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--on-primary);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.app-nav__icon:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.app-nav__icon .material-symbols-outlined {
+  font-size: 24px;
+}
+
+/* ---------- Footer ---------- */
+
+.app-footer {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 32px var(--margin-lg);
+  background: var(--surface-container-low);
+  border-top: 1px solid var(--outline-variant);
+}
+
+.app-shell--wrapped .app-footer {
+  background: rgba(255, 255, 255, 0.03);
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.app-footer__brand .headline-md {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-headline-md);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.app-shell--wrapped .app-footer__brand .headline-md {
+  color: var(--primary-fixed-dim);
+}
+
+.app-footer__brand p {
+  margin: 4px 0 0;
+  font-size: var(--text-label-md);
+  color: var(--on-surface-variant);
+  opacity: 0.75;
+}
+
+.app-shell--wrapped .app-footer__brand p {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.app-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--margin-md);
+}
+
+.app-footer__links a {
+  font-size: var(--text-label-md);
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.app-shell--wrapped .app-footer__links a {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.app-footer__links a:hover {
+  color: var(--primary);
+}
+
+.app-shell--wrapped .app-footer__links a:hover {
+  color: var(--primary-fixed-dim);
+}
+
+/* ---------- Back-to-top ---------- */
+
+.app-fab {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  z-index: 40;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 12px 30px rgba(111, 80, 146, 0.35);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.app-fab:hover {
+  transform: scale(1.1);
+}
+
+.app-fab:active {
+  transform: scale(0.95);
+}
+
+.app-fab .material-symbols-outlined {
+  font-size: 28px;
+}
+
+/* ---------- Responsive ---------- */
+
+/* The nav search is now the only one on the page, so it stays visible at every
+   width — only the account email gives up its space. */
+@media (max-width: 1100px) {
+  .app-nav__search {
+    max-width: 220px;
+  }
+
+  .app-nav__email {
+    display: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .app-nav {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px var(--container-padding);
+  }
+
+  .app-nav__group {
+    width: 100%;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .app-nav__brand {
+    font-size: var(--text-headline-lg);
+  }
+
+  /* Full-width search on its own row rather than squeezed beside the actions. */
+  .app-nav__search {
+    order: 2;
+    width: 100%;
+    max-width: none;
+  }
+
+  .app-nav__actions {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .app-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px var(--container-padding);
+  }
+
+  .app-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+}
