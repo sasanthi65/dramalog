@@ -38,17 +38,10 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        fontSize: "18px",
-        color: "white",
-        fontWeight: "500"
-      }}>
-        Loading DramaLog...
+      <div className="app-boot">
+        <div className="loading-reel" />
+        <p className="app-boot__brand">DramaLog</p>
+        <p className="app-boot__caption">Setting the scene…</p>
       </div>
     );
   }
@@ -64,7 +57,7 @@ export default function App() {
       </Routes>
 
       {/* Toast container */}
-      <div style={{ position: "fixed", bottom: "20px", right: "20px", zIndex: 1999 }}>
+      <div className="toast-stack">
         {toasts.map(toast => (
           <Toast
             key={toast.id}
