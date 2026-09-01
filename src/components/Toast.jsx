@@ -1,4 +1,11 @@
 import { useState, useEffect } from "react";
+import "./Toast.css";
+
+const toastIcons = {
+  success: "check_circle",
+  error: "error",
+  info: "info",
+};
 
 export default function Toast({ id, message, type = "info", onRemove }) {
   const [isExiting, setIsExiting] = useState(false);
@@ -12,60 +19,19 @@ export default function Toast({ id, message, type = "info", onRemove }) {
     return () => clearTimeout(timer);
   }, [id, onRemove]);
 
-  const bgColor = {
-    success: "#4caf50",
-    error: "#f44336",
-    info: "#2196f3"
-  }[type] || "#2196f3";
+  const dismiss = () => {
+    setIsExiting(true);
+    setTimeout(() => onRemove(id), 300);
+  };
 
   return (
-    <div
-      style={{
-        background: bgColor,
-        color: "white",
-        padding: "14px 20px",
-        borderRadius: "8px",
-        marginBottom: "12px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        minWidth: "280px",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-        animation: isExiting ? "slideOut 0.3s ease" : "slideIn 0.3s ease",
-      }}
-    >
-      <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(400px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-          from { transform: translateX(0); opacity: 1; }
-          to { transform: translateX(400px); opacity: 0; }
-        }
-      `}</style>
-
-      <span style={{ fontSize: "14px", fontWeight: "500" }}>{message}</span>
-      <button
-        onClick={() => {
-          setIsExiting(true);
-          setTimeout(() => onRemove(id), 300);
-        }}
-        style={{
-          background: "none",
-          border: "none",
-          color: "white",
-          cursor: "pointer",
-          fontSize: "18px",
-          padding: "0",
-          marginLeft: "16px",
-          opacity: 0.7,
-          transition: "opacity 0.2s"
-        }}
-        onMouseEnter={(e) => e.target.style.opacity = "1"}
-        onMouseLeave={(e) => e.target.style.opacity = "0.7"}
-      >
-        ✕
+    <div className={`toast toast--${type} ${isExiting ? "is-exiting" : ""}`} role="status">
+      <span className="material-symbols-outlined toast__icon" aria-hidden="true">
+        {toastIcons[type] || toastIcons.info}
+      </span>
+      <span className="toast__message">{message}</span>
+      <button className="toast__close" type="button" onClick={dismiss} aria-label="Dismiss notification">
+        <span className="material-symbols-outlined" aria-hidden="true">close</span>
       </button>
     </div>
   );

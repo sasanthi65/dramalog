@@ -1,17 +1,26 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Watchlist from "./Watchlist";
 
-const { mockGetDramas, mockSignOut, mockUpdateDrama } = vi.hoisted(() => ({
+const { mockGetDramas, mockSignOut, mockUpdateDrama, mockGetTrending, mockGetShowDetails } = vi.hoisted(() => ({
   mockGetDramas: vi.fn(),
   mockSignOut: vi.fn(),
   mockUpdateDrama: vi.fn(),
+  mockGetTrending: vi.fn(),
+  mockGetShowDetails: vi.fn(),
 }));
 
 vi.mock("../lib/supabase", () => ({
   getDramas: mockGetDramas,
   signOut: mockSignOut,
   updateDrama: mockUpdateDrama,
+}));
+
+vi.mock("../lib/tmdb", () => ({
+  getTrendingKdramas: mockGetTrending,
+  getShowDetails: mockGetShowDetails,
+  tmdbImage: (path, size = "w780") =>
+    path ? `https://image.tmdb.org/t/p/${size}${path}` : null,
 }));
 
 vi.mock("../components/AddDramaModal", () => ({
@@ -33,32 +42,102 @@ vi.mock("react-router-dom", async () => {
 describe("Watchlist", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: TMDb unavailable, so the banner falls back to local content.
+    mockGetTrending.mockResolvedValue({ data: [], error: null });
+    mockGetShowDetails.mockResolvedValue({ data: { number_of_episodes: 16 }, error: null });
     mockGetDramas.mockResolvedValue({
       data: [
         { id: "1", title: "Lovely Runner", status: "watching", year_watched: 2024 },
         { id: "2", title: "Crash Landing on You", status: "completed", year_watched: 2020 },
-        { id: "3", title: "The Glory", status: "completed", year_watched: 2023 },
       ],
       error: null,
     });
   });
 
-  it("does not render the fetch posters button", async () => {
+  it("renders the redesigned watchlist hero and filters dramas", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
     expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /fetch posters/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Crash Landing on You")).toBeInTheDocument();
+    expect(screen.getByText("Your watchlist, reimagined.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Search dramas..."), {
+      target: { value: "runner" },
+    });
+
+    expect(screen.getByText("Lovely Runner")).toBeInTheDocument();
+    expect(screen.queryByText("Crash Landing on You")).not.toBeInTheDocument();
   });
 
-  it("shows genres and status badges on drama cards", async () => {
-    mockGetDramas.mockResolvedValueOnce({
+  it("finds dramas by cast member and sorts by lead actor", async () => {
+    mockGetDramas.mockResolvedValue({
       data: [
         {
           id: "1",
           title: "Lovely Runner",
-          status: "watching",
+          status: "completed",
           year_watched: 2024,
-          genres: ["Romance", "Comedy"],
+          main_cast: [{ id: 10, name: "Byeon Woo-seok", character: "Ryu Sun-jae" }],
+        },
+        {
+          id: "2",
+          title: "Strong Girl Nam-soon",
+          status: "completed",
+          year_watched: 2023,
+          main_cast: [{ id: 11, name: "Lee Yoo-mi", character: "Gang Nam-soon" }],
+        },
+        {
+          id: "3",
+          title: "Twenty-Five Twenty-One",
+          status: "completed",
+          year_watched: 2022,
+          main_cast: [{ id: 10, name: "Byeon Woo-seok", character: "Moon Ji-woong" }],
+        },
+      ],
+      error: null,
+    });
+
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
+
+    // Searching by actor name surfaces every drama they appear in.
+    fireEvent.change(screen.getByPlaceholderText("Search dramas..."), {
+      target: { value: "byeon woo" },
+    });
+
+    expect(screen.getByText("Lovely Runner")).toBeInTheDocument();
+    expect(screen.getByText("Twenty-Five Twenty-One")).toBeInTheDocument();
+    expect(screen.queryByText("Strong Girl Nam-soon")).not.toBeInTheDocument();
+
+    // A character name works too.
+    fireEvent.change(screen.getByPlaceholderText("Search dramas..."), {
+      target: { value: "nam-soon" },
+    });
+    expect(screen.getByText("Strong Girl Nam-soon")).toBeInTheDocument();
+    expect(screen.queryByText("Lovely Runner")).not.toBeInTheDocument();
+
+    // Sorting by lead actor groups an actor's dramas together.
+    fireEvent.change(screen.getByPlaceholderText("Search dramas..."), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Sort dramas"), { target: { value: "actor" } });
+
+    const titles = screen.getAllByRole("heading", { level: 3 }).map((node) => node.textContent);
+    expect(titles).toEqual([
+      "Lovely Runner",
+      "Twenty-Five Twenty-One",
+      "Strong Girl Nam-soon",
+    ]);
+  });
+
+  it("features trending K-dramas from TMDb in the banner", async () => {
+    mockGetTrending.mockResolvedValue({
+      data: [
+        {
+          id: 900,
+          name: "When Life Gives You Tangerines",
+          overview: "A Jeju island love story spanning decades.",
+          backdrop_path: "/backdrop.jpg",
+          poster_path: "/poster.jpg",
+          original_language: "ko",
         },
       ],
       error: null,
@@ -66,106 +145,146 @@ describe("Watchlist", () => {
 
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
-    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
-    expect(screen.getByText("Romance, Comedy")).toBeInTheDocument();
-    expect(screen.getByText("Watching", { selector: "span" })).toBeInTheDocument();
+    expect(await screen.findByText("When Life Gives You Tangerines")).toBeInTheDocument();
+    expect(
+      screen.getByText(`Trending in ${new Date().getFullYear()}`)
+    ).toBeInTheDocument();
+    expect(screen.getByText("A Jeju island love story spanning decades.")).toBeInTheDocument();
+    // Trending titles are not in the collection, so they offer an add action.
+    expect(screen.getByText("Add to watchlist")).toBeInTheDocument();
+    // The editorial fallback is displaced.
+    expect(screen.queryByText("Your watchlist, reimagined.")).not.toBeInTheDocument();
   });
 
-  it("shows watchlist stats summary", async () => {
+  it("auto-advances the banner and pauses on hover", async () => {
+    vi.useFakeTimers();
+    mockGetTrending.mockResolvedValue({
+      data: [
+        { id: 1, name: "First Drama", overview: "One.", backdrop_path: "/a.jpg", poster_path: "/a.jpg", original_language: "ko" },
+        { id: 2, name: "Second Drama", overview: "Two.", backdrop_path: "/b.jpg", poster_path: "/b.jpg", original_language: "ko" },
+      ],
+      error: null,
+    });
+
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+    await act(async () => {});
 
-    expect(await screen.findByText("Lovely Runner")).toBeInTheDocument();
-    expect(screen.getByText("Total dramas")).toBeInTheDocument();
-    expect(screen.getByText("Avg. rating")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "First Drama" })).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(7000);
+    });
+    expect(screen.getByRole("heading", { name: "Second Drama" })).toBeInTheDocument();
+
+    // Hovering holds the current slide.
+    fireEvent.mouseEnter(screen.getByLabelText("Featured dramas"));
+    await act(async () => {
+      vi.advanceTimersByTime(21000);
+    });
+    expect(screen.getByRole("heading", { name: "Second Drama" })).toBeInTheDocument();
+
+    vi.useRealTimers();
   });
 
-  it("renders a featured banner for popular ongoing dramas", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        results: [
-          {
-            id: 12345,
-            name: "Lovely Runner",
-            overview: "A charming and emotional romance.",
-            poster_path: "/poster.jpg",
-            original_language: "ko",
-            origin_country: ["KR"],
-          },
-        ],
-      }),
+  it("flags a trending drama that is already saved", async () => {
+    mockGetDramas.mockResolvedValue({
+      data: [{ id: "1", title: "Lovely Runner", status: "watching", tmdb_id: "900" }],
+      error: null,
+    });
+    mockGetTrending.mockResolvedValue({
+      data: [
+        {
+          id: 900,
+          name: "Lovely Runner",
+          overview: "A time-slip romance.",
+          backdrop_path: "/backdrop.jpg",
+          poster_path: "/poster.jpg",
+          original_language: "ko",
+        },
+      ],
+      error: null,
     });
 
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
-    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining("/discover/tv"));
-    expect(await screen.findByText("Popular K-dramas")).toBeInTheDocument();
-    expect(screen.getByText("Lovely Runner", { selector: "h3" })).toBeInTheDocument();
+    expect(await screen.findByText("Already in your watchlist")).toBeInTheDocument();
+    expect(screen.queryByText("Add to watchlist")).not.toBeInTheDocument();
   });
 
-  it("makes the featured banner link to the selected drama on TMDb", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        results: [
-          {
-            id: 12345,
-            name: "Lovely Runner",
-            overview: "A charming and emotional romance.",
-            poster_path: "/poster.jpg",
-            original_language: "ko",
-            origin_country: ["KR"],
-          },
-        ],
-      }),
+  it("paginates the collection at 36 dramas per page", async () => {
+    mockGetDramas.mockResolvedValue({
+      data: Array.from({ length: 120 }, (_, index) => ({
+        id: String(index + 1),
+        title: `Drama ${String(index + 1).padStart(3, "0")}`,
+        status: "completed",
+        year_watched: 2000 + index,
+      })),
+      error: null,
     });
 
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
-    const link = await screen.findByRole("link", { name: /open lovely runner on tmdb/i });
-    expect(link).toHaveAttribute("href", "https://www.themoviedb.org/tv/12345");
-    expect(link).toHaveAttribute("target", "_blank");
-  });
+    // First page holds 36 of the 120 titles.
+    expect(await screen.findByText("Drama 001")).toBeInTheDocument();
+    expect(screen.getByText("Drama 036")).toBeInTheDocument();
+    expect(screen.queryByText("Drama 037")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Showing 1–36 of 120 dramas in your collection")
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Page 1")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByLabelText("First page")).toBeDisabled();
+    expect(screen.getByLabelText("Previous page")).toBeDisabled();
 
-  it("filters dramas by the search query", async () => {
-    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+    // Jump straight to a numbered page — 120 titles span 4 pages of 36.
+    fireEvent.click(screen.getByLabelText("Page 4"));
 
-    expect(await screen.findByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
-    expect(screen.getByText("Crash Landing on You", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("Drama 109")).toBeInTheDocument();
+    expect(screen.getByText("Drama 120")).toBeInTheDocument();
+    expect(screen.queryByText("Drama 036")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Page 4")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByLabelText("Next page")).toBeDisabled();
+    expect(screen.getByLabelText("Last page")).toBeDisabled();
 
+    // Skip back to the first page.
+    fireEvent.click(screen.getByLabelText("First page"));
+    expect(screen.getByText("Drama 001")).toBeInTheDocument();
+
+    // Skip to the last page.
+    fireEvent.click(screen.getByLabelText("Last page"));
+    expect(screen.getByText("Drama 120")).toBeInTheDocument();
+
+    // Narrowing the filter drops back to a single page.
     fireEvent.change(screen.getByPlaceholderText("Search dramas..."), {
-      target: { value: "runner" },
+      target: { value: "Drama 11" },
     });
 
-    expect(screen.getByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
-    expect(screen.queryByText("Crash Landing on You", { selector: "p" })).not.toBeInTheDocument();
+    // Matches Drama 110–119, which fits on a single page.
+    expect(screen.getByText("Drama 110")).toBeInTheDocument();
+    expect(screen.getByText("Drama 119")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Page 2")).not.toBeInTheDocument();
   });
 
-  it("sorts dramas by title when selected", async () => {
-    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
-
-    expect(await screen.findByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Sort by"), {
-      target: { value: "title" },
+  it("collapses long page runs with ellipses", async () => {
+    mockGetDramas.mockResolvedValue({
+      data: Array.from({ length: 600 }, (_, index) => ({
+        id: String(index + 1),
+        title: `Drama ${String(index + 1).padStart(3, "0")}`,
+        status: "completed",
+        year_watched: 2000 + index,
+      })),
+      error: null,
     });
 
-    const cardList = screen.getByText("Showing 3 results").closest("div").parentElement;
-    const dramaTitles = Array.from(cardList.querySelectorAll("p, h3")).map((node) => node.textContent).filter(Boolean);
-    expect(dramaTitles).toContain("Crash Landing on You");
-  });
-
-  it("filters dramas by the selected watched year", async () => {
     render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
 
-    expect(await screen.findByText("Lovely Runner", { selector: "p" })).toBeInTheDocument();
+    // 17 pages: first, last and a window around the current page only.
+    expect(await screen.findByLabelText("Page 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Page 17")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Page 6")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Filter by year watched"), {
-      target: { value: "2023" },
-    });
+    fireEvent.click(screen.getByLabelText("Page 17"));
 
-    expect(screen.getByText("The Glory", { selector: "p" })).toBeInTheDocument();
-    expect(screen.queryByText("Lovely Runner", { selector: "p" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Crash Landing on You", { selector: "p" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Page 16")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Page 2")).not.toBeInTheDocument();
   });
 });

@@ -1,9 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { updateDrama, deleteDrama } from "../lib/supabase";
+import { extractMainCast, findShowByTitle, getShowDetails, tmdbImage } from "../lib/tmdb";
+import "./Modal.css";
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
-export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose }) {
+const statusLabels = {
+  completed: "Watched",
+  watching: "Watching",
+  want_to_watch: "Want to watch",
+};
+
+// Finishing the last episode marks a drama watched; starting one marks it as
+// in progress. Mirrors the behaviour in the Stitch management view.
+const deriveStatus = (episodes, total, currentStatus) => {
+  if (!total) return currentStatus;
+  if (episodes >= total) return "completed";
+  if (episodes > 0) return "watching";
+  return currentStatus;
+};
+
+export default function DramaDetailModal({ drama, onUpdated, onProgressUpdated, onDeleted, onClose }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({
     title: drama.title,
@@ -14,14 +31,81 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
     status: drama.status,
     year_watched: drama.year_watched || "",
     rating: drama.rating || "",
-    review: drama.review || ""
+    review: drama.review || "",
+    total_episodes: drama.total_episodes || "",
+    episodes_watched: drama.episodes_watched || "",
+    main_cast: drama.main_cast || [],
+    tmdb_id: drama.tmdb_id || ""
   });
+  const [refreshing, setRefreshing] = useState(false);
+  const [episodesWatched, setEpisodesWatched] = useState(Number(drama.episodes_watched) || 0);
+  const [progressError, setProgressError] = useState("");
+  const [currentRating, setCurrentRating] = useState(drama.rating ?? null);
+  const [ratingSaving, setRatingSaving] = useState(false);
+  const [ratingError, setRatingError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState(drama.title);
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+
+  const totalEpisodes = Number(drama.total_episodes) || 0;
+  // A finished drama has nothing left to track — it shows its length instead.
+  const isCompleted = drama.status === "completed";
+  const saveTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(saveTimer.current), []);
+
+  // Parent updates from the detail modal (including episode progress) should
+  // remain reflected when the selected drama changes in place.
+  useEffect(() => {
+    setCurrentRating(drama.rating ?? null);
+  }, [drama.id, drama.rating]);
+
+  // The stepper updates instantly and writes back shortly after you stop
+  // clicking, so holding + does not fire a request per episode.
+  const setEpisodeProgress = (nextValue) => {
+    const clamped = Math.min(Math.max(Number(nextValue) || 0, 0), totalEpisodes || Infinity);
+    setEpisodesWatched(clamped);
+    setProgressError("");
+
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const { data, error: saveError } = await updateDrama(drama.id, {
+        episodes_watched: clamped,
+        status: deriveStatus(clamped, totalEpisodes, drama.status),
+      });
+
+      if (saveError) {
+        setProgressError(
+          /column/i.test(saveError.message || "")
+            ? "Episode tracking needs the episodes_watched column — run the migration in supabase/add-episode-tracking.sql."
+            : "Could not save your episode progress."
+        );
+        return;
+      }
+
+      if (data?.[0]) onProgressUpdated?.(data[0]);
+    }, 600);
+  };
+
+  const saveRating = async (rating) => {
+    setRatingSaving(true);
+    setRatingError("");
+
+    const { data, error: saveError } = await updateDrama(drama.id, { rating });
+
+    if (saveError || !data?.[0]) {
+      setRatingError("Could not save your rating. Please try again.");
+      setRatingSaving(false);
+      return;
+    }
+
+    setCurrentRating(data[0].rating);
+    onProgressUpdated?.(data[0]);
+    setRatingSaving(false);
+  };
 
   const searchTMDB = async (e) => {
     e.preventDefault();
@@ -51,7 +135,7 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
     setSearching(false);
   };
 
-  const selectResult = (result) => {
+  const selectResult = async (result) => {
     const genreMap = {
       10759: "Action", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary",
       18: "Drama", 10751: "Family", 10762: "Kids", 9648: "Mystery", 10763: "News",
@@ -70,17 +154,79 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
       poster_url: posterUrl,
       synopsis: result.overview,
       genres: genres.length > 0 ? genres : [],
-      year_released: result.first_air_date ? parseInt(result.first_air_date.split("-")[0]) : ""
+      year_released: result.first_air_date ? parseInt(result.first_air_date.split("-")[0]) : "",
+      tmdb_id: String(result.id)
     });
 
     setSearchMode(false);
     setSearchResults([]);
     setSearchQuery("");
+
+    // Picking a title also relinks it, so pull its cast and length straight away.
+    const { data: details } = await getShowDetails(result.id);
+    if (details?.id) {
+      setEditData((current) => ({
+        ...current,
+        main_cast: extractMainCast(details),
+        total_episodes: details.number_of_episodes || current.total_episodes
+      }));
+    }
+  };
+
+  // Backfills cast and episode count for dramas saved before those existed.
+  // Older entries have no tmdb_id, so they are relinked by title first.
+  const refreshFromTmdb = async () => {
+    setRefreshing(true);
+    setError("");
+
+    const title = editData.title || drama.title;
+    let tmdbId = editData.tmdb_id || drama.tmdb_id;
+
+    if (!tmdbId) {
+      const { data: match } = await findShowByTitle(title);
+
+      if (!match?.id) {
+        setError(`Could not find “${title}” on TMDb. Use “Search TMDb again” to pick it manually.`);
+        setRefreshing(false);
+        return;
+      }
+
+      tmdbId = match.id;
+    }
+
+    const { data: details, error: detailsError } = await getShowDetails(tmdbId);
+
+    if (detailsError || !details?.id) {
+      setError("Could not reach TMDb. Please try again.");
+      setRefreshing(false);
+      return;
+    }
+
+    const cast = extractMainCast(details);
+
+    setEditData((current) => ({
+      ...current,
+      tmdb_id: String(tmdbId),
+      main_cast: cast,
+      total_episodes: details.number_of_episodes || current.total_episodes,
+    }));
+
+    if (cast.length === 0) {
+      setError(`TMDb has no cast listed for “${details.name || title}”.`);
+    }
+
+    setRefreshing(false);
   };
 
   const handleSave = async () => {
     setSubmitting(true);
     setError("");
+
+    const editedTotal = editData.total_episodes ? parseInt(editData.total_episodes) : null;
+    // Marking something completed implies every episode was watched.
+    const editedWatched = editData.status === "completed"
+      ? editedTotal || 0
+      : editData.episodes_watched ? parseInt(editData.episodes_watched) : 0;
 
     const updatePayload = {
       title: editData.title,
@@ -91,7 +237,11 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
       status: editData.status,
       year_watched: editData.year_watched || null,
       rating: editData.rating ? parseInt(editData.rating) : null,
-      review: editData.review || null
+      review: editData.review || null,
+      total_episodes: editedTotal,
+      episodes_watched: editedWatched,
+      main_cast: editData.main_cast?.length > 0 ? editData.main_cast : null,
+      tmdb_id: editData.tmdb_id || null
     };
 
     const { data, error: updateError } = await updateDrama(drama.id, updatePayload);
@@ -119,292 +269,263 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
     }
   };
 
-  return (
-    <div style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "flex-end",
-      zIndex: 1000,
-      animation: "slideUp 0.3s ease"
-    }}>
-      <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-      `}</style>
+  const errorBanner = error ? (
+    <div className="error-banner" role="alert">
+      <span className="material-symbols-outlined" aria-hidden="true">error</span>
+      <span>{error}</span>
+    </div>
+  ) : null;
 
-      <div style={{
-        background: "white",
-        borderRadius: "24px 24px 0 0",
-        padding: "24px 20px",
-        width: "100%",
-        maxHeight: "90vh",
-        overflowY: "auto",
-        animation: "slideUp 0.3s ease"
-      }}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "20px", fontWeight: "600", margin: "0" }}>
-            {isEditing ? "Edit drama" : drama.title}
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "24px",
-              cursor: "pointer",
-              color: "#999"
-            }}
-          >
-            ✕
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Drama details">
+      <div className="modal-sheet">
+        <div className="modal-sheet__header">
+          <div>
+            <span className="eyebrow">{isEditing ? "Editing" : "From your collection"}</span>
+            <h2>{isEditing ? "Edit drama" : drama.title}</h2>
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Close drama detail modal" type="button">
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
 
         {!isEditing ? (
           <>
-            {/* Drama details display */}
-            <div style={{ background: "#f9f9f9", borderRadius: "12px", padding: "16px", marginBottom: "24px" }}>
-              <div style={{ display: "flex", gap: "16px" }}>
-                {drama.poster_url ? (
-                  <img
-                    src={drama.poster_url}
-                    alt={drama.title}
-                    style={{ width: "80px", height: "120px", borderRadius: "8px", objectFit: "cover" }}
-                  />
-                ) : (
-                  <div style={{
-                    width: "80px",
-                    height: "120px",
-                    borderRadius: "8px",
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                  }} />
+            <div className="modal-summary">
+              {drama.poster_url ? (
+                <img className="modal-summary__poster" src={drama.poster_url} alt="" />
+              ) : (
+                <div className="modal-summary__poster modal-summary__poster--empty" />
+              )}
+              <div className="modal-summary__body">
+                <p className="modal-summary__meta">
+                  {drama.year_released ? `Released: ${drama.year_released}` : "Release year unknown"}
+                </p>
+                {drama.rating && (
+                  <span className="modal-summary__rating">
+                    <span className="material-symbols-outlined is-filled" aria-hidden="true">star</span>
+                    {drama.rating}/10
+                  </span>
                 )}
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: "12px", color: "#999", margin: "0 0 4px" }}>
-                    {drama.year_released ? `Released: ${drama.year_released}` : "Release year unknown"}
-                  </p>
-                  {drama.genres && drama.genres.length > 0 && (
-                    <p style={{ fontSize: "12px", color: "#666", margin: "0 0 4px" }}>
-                      {drama.genres.join(", ")}
-                    </p>
-                  )}
-                  {drama.rating && (
-                    <p style={{ fontSize: "14px", fontWeight: "600", margin: "0" }}>
-                      <span style={{ color: "#ffc107" }}>★ {drama.rating}/10</span>
-                    </p>
-                  )}
+                {drama.genres && drama.genres.length > 0 && (
+                  <div className="detail-genres">
+                    {drama.genres.map((genre) => (
+                      <span key={genre}>{genre}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {isCompleted ? null : totalEpisodes > 0 ? (
+              <div className="episode-tracker">
+                <p className="episode-tracker__label">Episodes watched</p>
+                <div className="episode-tracker__row">
+                  <div
+                    className="episode-tracker__bar"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={totalEpisodes}
+                    aria-valuenow={episodesWatched}
+                    aria-label="Episode progress"
+                  >
+                    <div style={{ width: `${(episodesWatched / totalEpisodes) * 100}%` }} />
+                  </div>
+
+                  <div className="episode-stepper">
+                    <button
+                      type="button"
+                      onClick={() => setEpisodeProgress(episodesWatched - 1)}
+                      disabled={episodesWatched === 0}
+                      aria-label="One episode back"
+                    >
+                      <span className="material-symbols-outlined" aria-hidden="true">remove</span>
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      max={totalEpisodes}
+                      value={episodesWatched}
+                      onChange={(event) => setEpisodeProgress(event.target.value)}
+                      aria-label="Episodes watched"
+                    />
+                    <span className="episode-stepper__divider">/</span>
+                    <span className="episode-stepper__total">{totalEpisodes}</span>
+                    <button
+                      type="button"
+                      onClick={() => setEpisodeProgress(episodesWatched + 1)}
+                      disabled={episodesWatched >= totalEpisodes}
+                      aria-label="One episode forward"
+                    >
+                      <span className="material-symbols-outlined" aria-hidden="true">add</span>
+                    </button>
+                  </div>
                 </div>
+                {progressError ? (
+                  <p className="episode-tracker__error" role="alert">{progressError}</p>
+                ) : (
+                  <p className="episode-tracker__hint">
+                    {episodesWatched >= totalEpisodes
+                      ? "Finished — marked as watched."
+                      : `${totalEpisodes - episodesWatched} episodes to go.`}
+                  </p>
+                )}
               </div>
+            ) : (
+              <p className="episode-tracker__hint episode-tracker__hint--standalone">
+                Add the total episode count under Edit to track your progress.
+              </p>
+            )}
+
+            {drama.status === "watching" ? (
+              <section className="detail-rating" aria-labelledby="detail-rating-label">
+                <div className="detail-rating__heading">
+                  <p id="detail-rating-label">Your rating</p>
+                  <strong>{currentRating ? `${currentRating}/10` : "Not rated"}</strong>
+                </div>
+                <div className="detail-rating__stars" aria-label="Your rating" aria-busy={ratingSaving}>
+                  {Array.from({ length: 10 }, (_, index) => {
+                    const value = index + 1;
+                    const isSelected = Number(currentRating) >= value;
+
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        className={isSelected ? "is-selected" : ""}
+                        onClick={() => saveRating(value)}
+                        disabled={ratingSaving}
+                        aria-label={`Rate ${drama.title} ${value} out of 10`}
+                        aria-pressed={Number(currentRating) === value}
+                      >
+                        <span className="material-symbols-outlined" aria-hidden="true">star</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {ratingError ? <p className="detail-rating__error" role="alert">{ratingError}</p> : null}
+              </section>
+            ) : null}
+
+            <div className="detail-facts">
+              <article>
+                <p>Status</p>
+                <strong>{statusLabels[drama.status] || "Want to watch"}</strong>
+              </article>
+              <article>
+                <p>Watched in</p>
+                <strong>{drama.year_watched || "Not recorded"}</strong>
+              </article>
+              {isCompleted && totalEpisodes > 0 ? (
+                <article>
+                  <p>Length</p>
+                  <strong>{totalEpisodes} episodes</strong>
+                </article>
+              ) : null}
             </div>
 
-            {/* Info grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
-              <div style={{ background: "#f9f9f9", borderRadius: "8px", padding: "12px" }}>
-                <p style={{ fontSize: "11px", color: "#999", margin: "0 0 6px", fontWeight: "600", textTransform: "uppercase" }}>Status</p>
-                <p style={{ fontSize: "14px", fontWeight: "600", margin: "0", color: "#1a1a1a" }}>
-                  {drama.status === "completed" ? "Watched" : drama.status === "watching" ? "Watching" : "Want to watch"}
-                </p>
+            {drama.main_cast?.length > 0 ? (
+              <div className="detail-prose">
+                <h3>Main cast</h3>
+                <ul className="cast-list">
+                  {drama.main_cast.map((person) => (
+                    <li key={person.id || person.name} className="cast-chip">
+                      {person.profile_path ? (
+                        <img src={tmdbImage(person.profile_path, "w185")} alt="" loading="lazy" />
+                      ) : (
+                        <span className="cast-chip__initial">{person.name?.[0] || "?"}</span>
+                      )}
+                      <span className="cast-chip__text">
+                        <b>{person.name}</b>
+                        {person.character ? <em>{person.character}</em> : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div style={{ background: "#f9f9f9", borderRadius: "8px", padding: "12px" }}>
-                <p style={{ fontSize: "11px", color: "#999", margin: "0 0 6px", fontWeight: "600", textTransform: "uppercase" }}>Watched in</p>
-                <p style={{ fontSize: "14px", fontWeight: "600", margin: "0", color: "#1a1a1a" }}>
-                  {drama.year_watched || "Not recorded"}
-                </p>
-              </div>
-            </div>
+            ) : null}
 
-            {/* Review */}
             {drama.review && (
-              <div style={{ marginBottom: "24px" }}>
-                <p style={{ fontSize: "12px", color: "#999", margin: "0 0 8px", fontWeight: "600", textTransform: "uppercase" }}>Review</p>
-                <p style={{ fontSize: "14px", color: "#333", margin: "0", lineHeight: "1.6", whiteSpace: "pre-wrap" }}>
-                  {drama.review}
-                </p>
+              <div className="detail-prose">
+                <h3>Review</h3>
+                <p>{drama.review}</p>
               </div>
             )}
 
-            {/* Synopsis */}
             {drama.synopsis && (
-              <div style={{ marginBottom: "24px" }}>
-                <p style={{ fontSize: "12px", color: "#999", margin: "0 0 8px", fontWeight: "600", textTransform: "uppercase" }}>Synopsis</p>
-                <p style={{ fontSize: "13px", color: "#666", margin: "0", lineHeight: "1.6" }}>
-                  {drama.synopsis}
-                </p>
+              <div className="detail-prose">
+                <h3>Synopsis</h3>
+                <p>{drama.synopsis}</p>
               </div>
             )}
 
-            {/* Action buttons */}
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                onClick={() => setIsEditing(true)}
-                style={{
-                  flex: 1,
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  color: "white",
-                  border: "none",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "600"
-                }}
-              >
+            {errorBanner}
+
+            <div className="modal-actions">
+              <button className="btn btn--primary" type="button" onClick={() => setIsEditing(true)}>
+                <span className="material-symbols-outlined" aria-hidden="true">edit</span>
                 Edit
               </button>
-              <button
-                onClick={handleDelete}
-                style={{
-                  flex: 1,
-                  background: "#ffe6e6",
-                  color: "#d32f2f",
-                  border: "1px solid #ffcccc",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "600"
-                }}
-              >
+              <button className="btn btn--danger" type="button" onClick={handleDelete} disabled={submitting}>
+                <span className="material-symbols-outlined" aria-hidden="true">delete</span>
                 Delete
               </button>
             </div>
           </>
         ) : searchMode ? (
           <>
-            {/* Search mode */}
-            <form onSubmit={searchTMDB} style={{ marginBottom: "24px" }}>
-              <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for drama..."
-                  style={{
-                    flex: 1,
-                    padding: "12px 14px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={searching}
-                  style={{
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    color: "white",
-                    border: "none",
-                    padding: "12px 20px",
-                    borderRadius: "8px",
-                    cursor: searching ? "not-allowed" : "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    opacity: searching ? 0.7 : 1
-                  }}
-                >
-                  {searching ? (
-                    <span>🔍 Searching...</span>
-                  ) : (
-                    <span>Search</span>
-                  )}
-                </button>
-              </div>
+            <form className="modal-search" onSubmit={searchTMDB}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for drama..."
+                aria-label="Search for drama"
+              />
+              <button className="btn btn--primary" type="submit" disabled={searching}>
+                {searching ? "Searching…" : "Search"}
+              </button>
             </form>
 
-            {error && (
-              <div style={{
-                background: "#ffe6e6",
-                color: "#d32f2f",
-                padding: "10px 12px",
-                borderRadius: "8px",
-                fontSize: "13px",
-                marginBottom: "16px",
-                border: "1px solid #ffcccc"
-              }}>
-                {error}
-              </div>
-            )}
+            {errorBanner}
 
             {searchResults.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div className="result-list">
                 {searchResults.map(result => (
-                  <div
+                  <button
                     key={result.id}
+                    type="button"
+                    className="result-card"
                     onClick={() => selectResult(result)}
-                    style={{
-                      background: "white",
-                      border: "1px solid #ddd",
-                      borderRadius: "12px",
-                      padding: "12px",
-                      cursor: "pointer",
-                      display: "flex",
-                      gap: "12px",
-                      transition: "all 0.2s"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "#667eea";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(102,126,234,0.1)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "#ddd";
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
                   >
                     {result.poster_path ? (
                       <img
+                        className="result-card__poster"
                         src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
-                        alt={result.name}
-                        style={{ width: "50px", height: "75px", borderRadius: "4px", objectFit: "cover" }}
+                        alt=""
                       />
                     ) : (
-                      <div style={{
-                        width: "50px",
-                        height: "75px",
-                        borderRadius: "4px",
-                        background: "#f0f0f0"
-                      }} />
+                      <div className="result-card__poster result-card__poster--empty" />
                     )}
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: "14px", fontWeight: "600", margin: "0 0 4px", color: "#1a1a1a" }}>
-                        {result.name || result.title}
-                      </p>
-                      <p style={{ fontSize: "12px", color: "#999", margin: "0 0 6px", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                        {result.overview}
-                      </p>
-                      <p style={{ fontSize: "11px", color: "#bbb", margin: "0" }}>
+                    <div className="result-card__body">
+                      <p className="result-card__title">{result.name || result.title}</p>
+                      <p className="result-card__overview">{result.overview}</p>
+                      <p className="result-card__year">
                         {result.first_air_date ? new Date(result.first_air_date).getFullYear() : "Year unknown"}
                       </p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
 
-            <div style={{ display: "flex", gap: "8px", marginTop: "24px" }}>
+            <div className="modal-actions">
               <button
+                className="btn btn--ghost"
+                type="button"
                 onClick={() => {
                   setSearchMode(false);
                   setSearchResults([]);
-                }}
-                style={{
-                  flex: 1,
-                  background: "white",
-                  color: "#666",
-                  border: "1px solid #ddd",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: "600"
                 }}
               >
                 Back
@@ -412,277 +533,193 @@ export default function DramaDetailModal({ drama, onUpdated, onDeleted, onClose 
             </div>
           </>
         ) : (
-          <>
-            {/* Edit form */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Poster preview and search */}
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "8px" }}>Poster</label>
-                <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
-                  {editData.poster_url ? (
-                    <img
-                      src={editData.poster_url}
-                      alt="preview"
-                      style={{ width: "60px", height: "90px", borderRadius: "8px", objectFit: "cover" }}
-                    />
-                  ) : (
-                    <div style={{
-                      width: "60px",
-                      height: "90px",
-                      borderRadius: "8px",
-                      background: "#f0f0f0"
-                    }} />
-                  )}
-                  <input
-                    type="text"
-                    value={editData.poster_url}
-                    onChange={(e) => setEditData({ ...editData, poster_url: e.target.value })}
-                    placeholder="Poster URL"
-                    style={{
-                      flex: 1,
-                      padding: "10px 12px",
-                      border: "1px solid #ddd",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                      fontFamily: "inherit",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-                <button
-                  onClick={() => setSearchMode(true)}
-                  style={{
-                    width: "100%",
-                    background: "#f0f0f0",
-                    color: "#666",
-                    border: "1px solid #ddd",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    fontWeight: "600"
-                  }}
-                >
-                  🔍 Search TMDB again
-                </button>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Title</label>
+          <div className="modal-form">
+            <div className="field">
+              <label htmlFor="detail-poster">Poster</label>
+              <div style={{ display: "flex", gap: "var(--margin-sm)", alignItems: "flex-start" }}>
+                {editData.poster_url ? (
+                  <img className="result-card__poster" src={editData.poster_url} alt="" />
+                ) : (
+                  <div className="result-card__poster result-card__poster--empty" />
+                )}
                 <input
+                  id="detail-poster"
                   type="text"
-                  value={editData.title}
-                  onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
+                  value={editData.poster_url}
+                  onChange={(e) => setEditData({ ...editData, poster_url: e.target.value })}
+                  placeholder="Poster URL"
                 />
               </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Status</label>
-                <select
-                  value={editData.status}
-                  onChange={(e) => setEditData({ ...editData, status: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                >
-                  <option value="completed">Completed</option>
-                  <option value="watching">Currently watching</option>
-                  <option value="want_to_watch">Want to watch</option>
-                </select>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Year released</label>
-                  <input
-                    type="number"
-                    value={editData.year_released}
-                    onChange={(e) => setEditData({ ...editData, year_released: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      border: "1px solid #ddd",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                      fontFamily: "inherit",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Year watched</label>
-                  <input
-                    type="text"
-                    value={editData.year_watched}
-                    onChange={(e) => setEditData({ ...editData, year_watched: e.target.value })}
-                    placeholder="e.g., 2024 or 2024-06"
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      border: "1px solid #ddd",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                      fontFamily: "inherit",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Genres</label>
-                <input
-                  type="text"
-                  value={editData.genres.join(", ")}
-                  onChange={(e) => setEditData({
-                    ...editData,
-                    genres: e.target.value.split(",").map(g => g.trim()).filter(Boolean)
-                  })}
-                  placeholder="e.g., Drama, Romance, Comedy"
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                />
-                <p style={{ fontSize: "11px", color: "#999", margin: "6px 0 0" }}>Separate with commas</p>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={editData.rating}
-                  onChange={(e) => setEditData({ ...editData, rating: e.target.value })}
-                  placeholder="Optional"
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Synopsis</label>
-                <textarea
-                  value={editData.synopsis}
-                  onChange={(e) => setEditData({ ...editData, synopsis: e.target.value })}
-                  placeholder="Drama synopsis..."
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                    minHeight: "80px"
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Review</label>
-                <textarea
-                  value={editData.review}
-                  onChange={(e) => setEditData({ ...editData, review: e.target.value })}
-                  placeholder="Add your thoughts..."
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                    minHeight: "100px"
-                  }}
-                />
-              </div>
-
-              {error && (
-                <div style={{
-                  background: "#ffe6e6",
-                  color: "#d32f2f",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  border: "1px solid #ffcccc"
-                }}>
-                  {error}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => setIsEditing(false)}
-                  style={{
-                    flex: 1,
-                    background: "white",
-                    color: "#666",
-                    border: "1px solid #ddd",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600"
-                  }}
-                >
-                  Cancel
+              <div className="modal-form__grid" style={{ marginTop: "var(--margin-sm)" }}>
+                <button className="btn btn--ghost" type="button" onClick={() => setSearchMode(true)}>
+                  <span className="material-symbols-outlined" aria-hidden="true">search</span>
+                  Search TMDb again
                 </button>
                 <button
-                  onClick={handleSave}
-                  disabled={submitting}
-                  style={{
-                    flex: 1,
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    color: "white",
-                    border: "none",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    opacity: submitting ? 0.7 : 1
-                  }}
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={refreshFromTmdb}
+                  disabled={refreshing}
                 >
-                  {submitting ? (
-                    <span>⏳ Saving...</span>
-                  ) : (
-                    <span>Save changes</span>
-                  )}
+                  <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
+                  {refreshing ? "Fetching…" : "Fetch cast & episodes"}
                 </button>
               </div>
             </div>
-          </>
+
+            {editData.main_cast?.length > 0 ? (
+              <div className="field">
+                <span>Main cast</span>
+                <ul className="cast-list cast-list--compact">
+                  {editData.main_cast.map((person) => (
+                    <li key={person.id || person.name} className="cast-chip">
+                      {person.profile_path ? (
+                        <img src={tmdbImage(person.profile_path, "w185")} alt="" loading="lazy" />
+                      ) : (
+                        <span className="cast-chip__initial">{person.name?.[0] || "?"}</span>
+                      )}
+                      <span className="cast-chip__text">
+                        <b>{person.name}</b>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="modal-form__hint">Pulled from TMDb — refresh to update.</p>
+              </div>
+            ) : null}
+
+            <div className="field">
+              <label htmlFor="detail-title">Title</label>
+              <input
+                id="detail-title"
+                type="text"
+                value={editData.title}
+                onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-status">Status</label>
+              <select
+                id="detail-status"
+                value={editData.status}
+                onChange={(e) => setEditData({ ...editData, status: e.target.value })}
+              >
+                <option value="completed">Completed</option>
+                <option value="watching">Currently watching</option>
+                <option value="want_to_watch">Want to watch</option>
+              </select>
+            </div>
+
+            <div className="modal-form__grid">
+              <div className="field">
+                <label htmlFor="detail-year-released">Year released</label>
+                <input
+                  id="detail-year-released"
+                  type="number"
+                  value={editData.year_released}
+                  onChange={(e) => setEditData({ ...editData, year_released: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="detail-year-watched">Year watched</label>
+                <input
+                  id="detail-year-watched"
+                  type="text"
+                  value={editData.year_watched}
+                  onChange={(e) => setEditData({ ...editData, year_watched: e.target.value })}
+                  placeholder="e.g., 2024 or 2024-06"
+                />
+              </div>
+            </div>
+
+            <div className="modal-form__grid">
+              <div className="field">
+                <label htmlFor="detail-total-episodes">Total episodes</label>
+                <input
+                  id="detail-total-episodes"
+                  type="number"
+                  min="0"
+                  value={editData.total_episodes}
+                  onChange={(e) => setEditData({ ...editData, total_episodes: e.target.value })}
+                  placeholder="e.g., 16"
+                />
+              </div>
+              {/* A completed drama is fully watched by definition. */}
+              {editData.status === "completed" ? null : (
+                <div className="field">
+                  <label htmlFor="detail-episodes-watched">Episodes watched</label>
+                  <input
+                    id="detail-episodes-watched"
+                    type="number"
+                    min="0"
+                    value={editData.episodes_watched}
+                    onChange={(e) => setEditData({ ...editData, episodes_watched: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-genres">Genres</label>
+              <input
+                id="detail-genres"
+                type="text"
+                value={editData.genres.join(", ")}
+                onChange={(e) => setEditData({
+                  ...editData,
+                  genres: e.target.value.split(",").map(g => g.trim()).filter(Boolean)
+                })}
+                placeholder="e.g., Drama, Romance, Comedy"
+              />
+              <p className="modal-form__hint">Separate with commas</p>
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-rating">Rating (1-10)</label>
+              <input
+                id="detail-rating"
+                type="number"
+                min="1"
+                max="10"
+                value={editData.rating}
+                onChange={(e) => setEditData({ ...editData, rating: e.target.value })}
+                placeholder="Optional"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-synopsis">Synopsis</label>
+              <textarea
+                id="detail-synopsis"
+                value={editData.synopsis}
+                onChange={(e) => setEditData({ ...editData, synopsis: e.target.value })}
+                placeholder="Drama synopsis..."
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="detail-review">Review</label>
+              <textarea
+                id="detail-review"
+                value={editData.review}
+                onChange={(e) => setEditData({ ...editData, review: e.target.value })}
+                placeholder="Add your thoughts..."
+              />
+            </div>
+
+            {errorBanner}
+
+            <div className="modal-actions">
+              <button className="btn btn--ghost" type="button" onClick={() => setIsEditing(false)}>
+                Cancel
+              </button>
+              <button className="btn btn--primary" type="button" onClick={handleSave} disabled={submitting}>
+                {submitting ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
