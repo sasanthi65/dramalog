@@ -103,6 +103,68 @@ describe("DramaDetailModal episode tracking", () => {
     expect(screen.getByText("Finished — marked as watched.")).toBeInTheDocument();
   });
 
+  it("marks a currently watching drama completed and records all known episodes", async () => {
+    const completedDrama = {
+      ...watchingDrama,
+      status: "completed",
+      episodes_watched: 16,
+      year_watched: "2024",
+    };
+    const onProgressUpdated = vi.fn();
+    updateDrama.mockResolvedValue({ data: [completedDrama], error: null });
+    renderModal({ ...watchingDrama, year_watched: "2024" }, { onProgressUpdated });
+
+    fireEvent.click(screen.getByLabelText("One episode forward"));
+    fireEvent.click(screen.getByRole("button", { name: "Mark as Completed" }));
+
+    await act(async () => {});
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+    });
+
+    expect(updateDrama).toHaveBeenCalledTimes(1);
+    expect(updateDrama).toHaveBeenCalledWith("drama-1", {
+      status: "completed",
+      episodes_watched: 16,
+      year_watched: "2024",
+    });
+    expect(onProgressUpdated).toHaveBeenCalledWith(completedDrama);
+  });
+
+  it("uses the current year when a completed drama has no recorded watch year", async () => {
+    const yearWatched = String(new Date().getFullYear());
+    const completedDrama = {
+      ...watchingDrama,
+      total_episodes: null,
+      status: "completed",
+      year_watched: yearWatched,
+    };
+    updateDrama.mockResolvedValue({ data: [completedDrama], error: null });
+    renderModal({ ...watchingDrama, total_episodes: null, year_watched: null });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark as Completed" }));
+    await act(async () => {});
+
+    expect(updateDrama).toHaveBeenCalledWith("drama-1", {
+      status: "completed",
+      episodes_watched: 12,
+      year_watched: yearWatched,
+    });
+  });
+
+  it("shows an error and allows retry if marking a drama completed fails", async () => {
+    updateDrama.mockResolvedValue({ data: null, error: { message: "Update failed" } });
+    renderModal(watchingDrama);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark as Completed" }));
+    await act(async () => {});
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not mark this drama as completed. Please try again."
+    );
+    expect(screen.getByRole("button", { name: "Mark as Completed" })).toBeEnabled();
+  });
+
   it("clamps at both ends", () => {
     const { unmount } = renderModal({ ...watchingDrama, episodes_watched: 0 });
     expect(screen.getByLabelText("One episode back")).toBeDisabled();

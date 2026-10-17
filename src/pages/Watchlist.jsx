@@ -159,6 +159,24 @@ export default function Watchlist({ user, showToast }) {
       return yearA - yearB;
     });
 
+  const emptyStatusMessages = {
+    completed: {
+      heading: "No completed dramas yet",
+      description: "Your completed dramas will show up here.",
+    },
+    watching: {
+      heading: "You're not watching any dramas right now",
+      description: "Start something new whenever you're ready.",
+    },
+    want_to_watch: {
+      heading: "No dramas planned yet",
+      description: "Dramas you plan to watch will show up here.",
+    },
+  };
+  const hasEmptyStatusFilter =
+    dramas.length > 0 && !searchQuery && yearFilter === "all" && filter !== "all";
+  const emptyStatusMessage = hasEmptyStatusFilter ? emptyStatusMessages[filter] : null;
+
   const totalPages = Math.max(1, Math.ceil(filteredDramas.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -572,16 +590,21 @@ export default function Watchlist({ user, showToast }) {
                   auto_awesome
                 </span>
                 <h2 className="headline-md">
-                  {searchQuery ? "No dramas match your search" : "No dramas yet"}
+                  {searchQuery
+                    ? "No dramas match your search"
+                    : emptyStatusMessage?.heading || "No dramas yet"}
                 </h2>
                 <p>
                   {searchQuery
                     ? "Try a different title, or clear the filters to see everything."
-                    : "Start your scrapbook by adding the first story you loved."}
+                    : emptyStatusMessage?.description ||
+                      "Start your scrapbook by adding the first story you loved."}
                 </p>
-                <button className="btn btn--primary" type="button" onClick={() => setShowAddModal(true)}>
-                  Add your first drama
-                </button>
+                {dramas.length === 0 && !searchQuery ? (
+                  <button className="btn btn--primary" type="button" onClick={() => setShowAddModal(true)}>
+                    Add your first drama
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="drama-grid">

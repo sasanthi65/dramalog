@@ -69,6 +69,25 @@ describe("Watchlist", () => {
     expect(screen.queryByText("Crash Landing on You")).not.toBeInTheDocument();
   });
 
+  it("shows a watching-specific empty state without a first-drama prompt", async () => {
+    mockGetDramas.mockResolvedValue({
+      data: [
+        { id: "1", title: "Crash Landing on You", status: "completed", year_watched: 2020 },
+        { id: "2", title: "Lovely Runner", status: "want_to_watch", year_watched: 2024 },
+      ],
+      error: null,
+    });
+
+    render(<Watchlist user={{ email: "user@example.com" }} showToast={vi.fn()} />);
+    await screen.findByText("Crash Landing on You");
+    fireEvent.click(screen.getByRole("button", { name: "Watching" }));
+
+    expect(screen.getByRole("heading", { name: "You're not watching any dramas right now" }))
+      .toBeInTheDocument();
+    expect(screen.getByText(/Your other dramas are still in your collection/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add your first drama" })).not.toBeInTheDocument();
+  });
+
   it("finds dramas by cast member and sorts by lead actor", async () => {
     mockGetDramas.mockResolvedValue({
       data: [

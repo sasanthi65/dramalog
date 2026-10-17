@@ -43,6 +43,8 @@ export default function DramaDetailModal({ drama, onUpdated, onProgressUpdated, 
   const [currentRating, setCurrentRating] = useState(drama.rating ?? null);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ratingError, setRatingError] = useState("");
+  const [completionSaving, setCompletionSaving] = useState(false);
+  const [completionError, setCompletionError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [searchMode, setSearchMode] = useState(false);
@@ -88,6 +90,35 @@ export default function DramaDetailModal({ drama, onUpdated, onProgressUpdated, 
 
       if (data?.[0]) onProgressUpdated?.(data[0]);
     }, 600);
+  };
+
+  const markAsCompleted = async () => {
+    setCompletionSaving(true);
+    setCompletionError("");
+    clearTimeout(saveTimer.current);
+
+    let completedDrama;
+    try {
+      const { data, error: saveError } = await updateDrama(drama.id, {
+        status: "completed",
+        episodes_watched: totalEpisodes || episodesWatched,
+        year_watched: drama.year_watched || new Date().getFullYear().toString(),
+      });
+
+      if (saveError || !data?.[0]) {
+        setCompletionError("Could not mark this drama as completed. Please try again.");
+        return;
+      }
+
+      completedDrama = data[0];
+    } catch {
+      setCompletionError("Could not mark this drama as completed. Please try again.");
+      return;
+    } finally {
+      setCompletionSaving(false);
+    }
+
+    onProgressUpdated?.(completedDrama);
   };
 
   const saveRating = async (rating) => {
@@ -411,6 +442,19 @@ export default function DramaDetailModal({ drama, onUpdated, onProgressUpdated, 
               <article>
                 <p>Status</p>
                 <strong>{statusLabels[drama.status] || "Want to watch"}</strong>
+                {drama.status === "watching" ? (
+                  <button
+                    className="detail-complete"
+                    type="button"
+                    onClick={markAsCompleted}
+                    disabled={completionSaving}
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      {completionSaving ? "hourglass_top" : "check_circle"}
+                    </span>
+                    {completionSaving ? "Saving…" : "Mark as Completed"}
+                  </button>
+                ) : null}
               </article>
               <article>
                 <p>Watched in</p>
@@ -423,6 +467,9 @@ export default function DramaDetailModal({ drama, onUpdated, onProgressUpdated, 
                 </article>
               ) : null}
             </div>
+            {completionError ? (
+              <p className="detail-complete__error" role="alert">{completionError}</p>
+            ) : null}
 
             {drama.main_cast?.length > 0 ? (
               <div className="detail-prose">
