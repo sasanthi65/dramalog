@@ -243,6 +243,62 @@
   gap: var(--margin-md);
 }
 
+.modal-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.modal-form .field label {
+  color: var(--on-surface-variant);
+  font-family: var(--font-body);
+  font-size: var(--text-label-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.modal-form .field input,
+.modal-form .field select,
+.modal-form .field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius);
+  background-color: rgba(255, 255, 255, 0.82);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  font-size: var(--text-body-md);
+  line-height: 1.4;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.modal-form .field select {
+  cursor: pointer;
+}
+
+.modal-form .field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.modal-form .field input::placeholder,
+.modal-form .field textarea::placeholder {
+  color: var(--outline);
+  opacity: 0.8;
+}
+
+.modal-form .field input:focus,
+.modal-form .field select:focus,
+.modal-form .field textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(216, 180, 254, 0.28);
+}
+
 .modal-form__hint {
   margin: 6px 0 0;
   font-size: 11px;

@@ -470,29 +470,29 @@ export default function Watchlist({ user, showToast }) {
           <section className="bento-stats" aria-label="Watchlist summary">
             <article className="glass-effect bento-stats__card">
               <span className="eyebrow">Total dramas</span>
-              <div>
-                <strong className="display-lg">{dramas.length}</strong>
+              <div className="bento-stats__value">
+                <strong>{dramas.length}</strong>
                 <p>Stories explored</p>
               </div>
             </article>
             <article className="glass-effect bento-stats__card">
               <span className="eyebrow">Avg. rating</span>
-              <div>
-                <strong className="display-lg">{avgRating}</strong>
+              <div className="bento-stats__value bento-stats__value--rating">
+                <strong>{avgRating}</strong>
                 <span className="bento-stats__suffix">/10</span>
               </div>
             </article>
             <article className="glass-effect bento-stats__card bento-stats__card--accent">
               <span className="eyebrow">Top genre</span>
-              <div>
-                <strong className="headline-lg">{topGenre}</strong>
+              <div className="bento-stats__value bento-stats__value--genre">
+                <strong>{topGenre}</strong>
                 <p>{runnerUpGenre ? `Followed by ${runnerUpGenre}` : "Add genres to see more"}</p>
               </div>
             </article>
             <article className="glass-effect bento-stats__card">
               <span className="eyebrow">In progress</span>
-              <div>
-                <strong className="display-lg">{watchingCount}</strong>
+              <div className="bento-stats__value">
+                <strong>{watchingCount}</strong>
                 <p>
                   {watchedCount} watched · {wantToWatchCount} planned
                 </p>

@@ -4,6 +4,150 @@
 @tailwind components;
 @tailwind utilities;
 
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.material-symbols-outlined.is-filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.glass-effect {
+  background: rgba(255, 251, 255, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.ghost-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--on-surface-variant);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.ghost-field:focus-within {
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(216, 180, 254, 0.28);
+}
+
+.ghost-field .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 20px;
+}
+
+.ghost-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 14px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--on-surface);
+  font: inherit;
+}
+
+.ghost-field input::placeholder {
+  color: var(--outline);
+  opacity: 0.8;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font: 600 var(--text-label-md) / 1.2 var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease,
+    box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn--primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 8px 20px rgba(111, 80, 146, 0.2);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #573878;
+  transform: translateY(-1px);
+}
+
+.btn--secondary {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: #bf9de5;
+}
+
+.btn--ghost {
+  border-color: var(--outline-variant);
+  background: transparent;
+  color: var(--on-surface-variant);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--surface-container-low);
+  color: var(--primary);
+}
+
+.btn--danger {
+  background: var(--error);
+  color: #ffffff;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #9f1616;
+}
+
+.btn--press {
+  background: linear-gradient(135deg, #6f5092, #573878);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(87, 56, 120, 0.24);
+}
+
+.btn--press:hover:not(:disabled) {
+  box-shadow: 0 14px 28px rgba(87, 56, 120, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn--press:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
 * {
   margin: 0;
   padding: 0;
