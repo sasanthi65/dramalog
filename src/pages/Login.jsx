@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { signIn } from "../lib/supabase";
+import AuthShowcase from "../components/AuthShowcase";
+import "./Auth.css";
 
 export default function Login({ showToast }) {
   const [email, setEmail] = useState("");
@@ -34,156 +36,84 @@ export default function Login({ showToast }) {
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "20px"
-    }}>
-      <div style={{
-        background: "white",
-        borderRadius: "16px",
-        padding: "48px 32px",
-        maxWidth: "400px",
-        width: "100%",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-      }}>
-        <h1 style={{
-          fontSize: "28px",
-          fontWeight: "600",
-          color: "#1a1a1a",
-          margin: "0 0 8px",
-          textAlign: "center"
-        }}>
-          DramaLog
-        </h1>
-        <p style={{
-          fontSize: "14px",
-          color: "#999",
-          textAlign: "center",
-          margin: "0 0 32px"
-        }}>
-          Your personal K-drama tracker
-        </p>
+    <div className="auth-page">
+      <AuthShowcase quote="&ldquo;Every drama you&rsquo;ve lived through, in one place.&rdquo;" />
 
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <div>
-            <label style={{
-              display: "block",
-              fontSize: "13px",
-              fontWeight: "500",
-              color: "#333",
-              marginBottom: "6px"
-            }}>
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontFamily: "inherit",
-                boxSizing: "border-box",
-                transition: "border 0.2s"
-              }}
-              onFocus={(e) => e.target.style.borderColor = "#667eea"}
-              onBlur={(e) => e.target.style.borderColor = "#ddd"}
-            />
-          </div>
+      <section className="auth-panel">
+        <div className="auth-panel__blob auth-panel__blob--top" aria-hidden="true" />
+        <div className="auth-panel__blob auth-panel__blob--bottom" aria-hidden="true" />
 
-          <div>
-            <label style={{
-              display: "block",
-              fontSize: "13px",
-              fontWeight: "500",
-              color: "#333",
-              marginBottom: "6px"
-            }}>
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontFamily: "inherit",
-                boxSizing: "border-box",
-                transition: "border 0.2s"
-              }}
-              onFocus={(e) => e.target.style.borderColor = "#667eea"}
-              onBlur={(e) => e.target.style.borderColor = "#ddd"}
-            />
-          </div>
+        <div className="auth-panel__inner">
+          <div className="glass-effect auth-card">
+            <header className="auth-card__header">
+              <h1>Welcome back</h1>
+              <p>Sign in to continue your cinematic journey</p>
+            </header>
 
-          {error && (
-            <div style={{
-              background: "#ffe6e6",
-              color: "#d32f2f",
-              padding: "10px 12px",
-              borderRadius: "8px",
-              fontSize: "13px",
-              border: "1px solid #ffcccc"
-            }}>
-              {error}
+            {error && (
+              <div className="error-banner" role="alert" style={{ marginBottom: "var(--margin-md)" }}>
+                <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form className="auth-form" onSubmit={handleLogin}>
+              <label className="ghost-field">
+                <span className="material-symbols-outlined" aria-hidden="true">mail</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email address"
+                  autoComplete="email"
+                  aria-label="Email"
+                />
+              </label>
+
+              <label className="ghost-field">
+                <span className="material-symbols-outlined" aria-hidden="true">lock</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  aria-label="Password"
+                />
+              </label>
+
+              <div className="auth-form__row">
+                <label className="auth-form__check">
+                  <input type="checkbox" />
+                  <span>Remember me</span>
+                </label>
+                <button
+                  className="auth-form__link"
+                  type="button"
+                  onClick={() => showToast("Password resets are coming soon", "info")}
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              <button className="btn btn--press" type="submit" disabled={loading}>
+                {loading ? "Logging in…" : "Log in"}
+              </button>
+            </form>
+
+            <div className="auth-divider">
+              <span>or</span>
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              color: "white",
-              border: "none",
-              padding: "12px 24px",
-              fontSize: "14px",
-              fontWeight: "600",
-              borderRadius: "8px",
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "opacity 0.2s",
-              opacity: loading ? 0.7 : 1,
-              marginTop: "8px"
-            }}
-          >
-            {loading ? "Logging in..." : "Log in"}
-          </button>
-        </form>
+            <p className="auth-footer">
+              Don&rsquo;t have an account?
+              <Link to="/signup">Sign up</Link>
+            </p>
+          </div>
 
-        <p style={{
-          fontSize: "14px",
-          color: "#666",
-          textAlign: "center",
-          marginTop: "24px",
-          marginBottom: "0"
-        }}>
-          Don't have an account?{" "}
-          <Link
-            to="/signup"
-            style={{
-              color: "#667eea",
-              textDecoration: "none",
-              fontWeight: "600",
-              cursor: "pointer"
-            }}
-          >
-            Sign up
-          </Link>
-        </p>
-      </div>
+          <p className="auth-legal">DramaLog Cinematic Tracking © {new Date().getFullYear()}</p>
+        </div>
+      </section>
     </div>
   );
 }

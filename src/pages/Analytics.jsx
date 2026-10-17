@@ -2,17 +2,41 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getDramas, signOut } from "../lib/supabase";
 import {
-  BarChart, Bar, PieChart, Pie, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
 } from "recharts";
+import AppShell from "../components/AppShell";
+import { tmdbImage } from "../lib/tmdb";
+import "./Analytics.css";
 
-const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b', '#fa709a', '#feca57'];
+// Wrapped palette: brand lavender/blossom/mint elevated to neon accents.
+const COLORS = ["#d8b4fe", "#ffa6b1", "#9dd1c4", "#dbb8ff", "#ffb2bb", "#b8eddf", "#efdbff", "#ffd9dc"];
+
+// The collection starts in 2009, so the range covers everything by default.
+const FIRST_YEAR = "2009";
+
+const tooltipStyle = {
+  background: "rgba(20, 18, 45, 0.92)",
+  border: "1px solid rgba(255, 255, 255, 0.12)",
+  borderRadius: "12px",
+  color: "#ffffff",
+  fontFamily: "Manrope, sans-serif",
+  fontSize: "13px",
+};
 
 export default function Analytics({ user, showToast }) {
   const navigate = useNavigate();
   const [dramas, setDramas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("2020");
+  const [dateFrom, setDateFrom] = useState(FIRST_YEAR);
   const [dateTo, setDateTo] = useState(new Date().getFullYear().toString());
 
   useEffect(() => {
@@ -30,24 +54,22 @@ export default function Analytics({ user, showToast }) {
     loadDramas();
   }, [showToast]);
 
-  // Filter dramas by date range
-  const filteredDramas = dramas.filter(d => {
+  const filteredDramas = dramas.filter((d) => {
     if (!d.year_watched) return false;
-    const year = parseInt(d.year_watched.split("-")[0]);
+    const year = parseInt(String(d.year_watched).split("-")[0]);
     return year >= parseInt(dateFrom) && year <= parseInt(dateTo);
   });
 
-  // Calculate stats
   const totalDramas = filteredDramas.length;
-  const avgRating = filteredDramas.filter(d => d.rating).length > 0
-    ? (filteredDramas.reduce((sum, d) => sum + (d.rating || 0), 0) / filteredDramas.filter(d => d.rating).length).toFixed(1)
-    : 0;
+  const ratedDramas = filteredDramas.filter((d) => d.rating);
+  const avgRating = ratedDramas.length > 0
+    ? (ratedDramas.reduce((sum, d) => sum + (d.rating || 0), 0) / ratedDramas.length).toFixed(1)
+    : "0";
 
-  // Genre breakdown
   const genreCount = {};
-  filteredDramas.forEach(d => {
+  filteredDramas.forEach((d) => {
     if (d.genres && d.genres.length > 0) {
-      d.genres.forEach(genre => {
+      d.genres.forEach((genre) => {
         genreCount[genre] = (genreCount[genre] || 0) + 1;
       });
     }
@@ -56,17 +78,16 @@ export default function Analytics({ user, showToast }) {
     ? Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0][0]
     : "No data";
 
-  // Data for charts
   const dramatsByYear = {};
   const ratingsByYear = {};
   const ratingCountsByYear = {};
 
-  filteredDramas.forEach(d => {
+  filteredDramas.forEach((d) => {
     if (!d.year_watched) return;
-    const year = d.year_watched.split("-")[0];
-    
+    const year = String(d.year_watched).split("-")[0];
+
     dramatsByYear[year] = (dramatsByYear[year] || 0) + 1;
-    
+
     if (d.rating) {
       ratingsByYear[year] = (ratingsByYear[year] || 0) + d.rating;
       ratingCountsByYear[year] = (ratingCountsByYear[year] || 0) + 1;
@@ -78,7 +99,7 @@ export default function Analytics({ user, showToast }) {
     .map(([year, count]) => ({
       year,
       count,
-      avgRating: ratingCountsByYear[year] ? (ratingsByYear[year] / ratingCountsByYear[year]).toFixed(1) : 0
+      avgRating: ratingCountsByYear[year] ? (ratingsByYear[year] / ratingCountsByYear[year]).toFixed(1) : 0,
     }));
 
   const genreChartData = Object.entries(genreCount)
@@ -86,8 +107,66 @@ export default function Analytics({ user, showToast }) {
     .slice(0, 10)
     .map(([genre, count]) => ({
       name: genre,
-      value: count
+      value: count,
     }));
+
+  const genreTotal = genreChartData.reduce((sum, entry) => sum + entry.value, 0);
+  const legendGenres = genreChartData.slice(0, 4);
+
+  // Conic gradient stand-in for the Stitch "Genre Soul" donut.
+  const donutGradient = (() => {
+    if (genreTotal === 0) return "conic-gradient(rgba(255,255,255,0.08) 0% 100%)";
+    let cursor = 0;
+    const stops = genreChartData.slice(0, 6).map((entry, index) => {
+      const start = (cursor / genreTotal) * 100;
+      cursor += entry.value;
+      const end = (cursor / genreTotal) * 100;
+      return `${COLORS[index % COLORS.length]} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
+    });
+    return `conic-gradient(${stops.join(", ")})`;
+  })();
+
+  // Who you watch most. Ranked by drama count, then by summed rating so a
+  // tie breaks toward the actor whose dramas you actually rated highly.
+  const actorTally = new Map();
+  filteredDramas.forEach((drama) => {
+    (drama.main_cast || []).forEach((person) => {
+      if (!person?.name) return;
+      const key = person.id || person.name;
+      const entry = actorTally.get(key) || {
+        name: person.name,
+        profile_path: person.profile_path,
+        count: 0,
+        ratingSum: 0,
+        ratedCount: 0,
+        titles: [],
+      };
+      entry.count += 1;
+      entry.titles.push(drama.title);
+      if (drama.rating) {
+        entry.ratingSum += drama.rating;
+        entry.ratedCount += 1;
+      }
+      if (!entry.profile_path && person.profile_path) entry.profile_path = person.profile_path;
+      actorTally.set(key, entry);
+    });
+  });
+
+  const topActors = [...actorTally.values()]
+    .sort((a, b) => b.count - a.count || b.ratingSum - a.ratingSum)
+    .slice(0, 6)
+    .map((actor) => ({
+      ...actor,
+      avgRating: actor.ratedCount > 0 ? (actor.ratingSum / actor.ratedCount).toFixed(1) : null,
+    }));
+
+  const biggestIdol = topActors[0] || null;
+  const runnersUp = topActors.slice(1);
+
+  const peakYear = yearChartData.reduce(
+    (best, entry) => (entry.count > (best?.count || 0) ? entry : best),
+    null
+  );
 
   const handleLogout = async () => {
     await signOut();
@@ -95,315 +174,311 @@ export default function Analytics({ user, showToast }) {
     navigate("/login");
   };
 
+  const handleShare = async () => {
+    const summary = `My DramaLog Wrapped ${dateFrom}–${dateTo}: ${totalDramas} dramas, ${avgRating} average rating, top genre ${topGenre}.`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "My DramaLog Wrapped", text: summary });
+        return;
+      } catch {
+        // Sharing dismissed — fall through to the clipboard copy.
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(summary);
+      showToast("Wrapped summary copied to clipboard!", "success");
+    } catch {
+      showToast("Could not share your Wrapped summary", "error");
+    }
+  };
+
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #f5f7fa 0%, #f0f2f8 100%)"
-    }}>
-      {/* Header */}
-      <div style={{
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        color: "white",
-        padding: "24px 20px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        boxShadow: "0 4px 12px rgba(102, 126, 234, 0.2)"
-      }}>
-        <div style={{ display: "flex", gap: "24px", alignItems: "center" }}>
-          <div>
-            <h1 style={{ fontSize: "24px", fontWeight: "600", margin: "0" }}>DramaLog</h1>
-            <p style={{ fontSize: "12px", margin: "4px 0 0", opacity: 0.9 }}>Analytics Dashboard</p>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <button
-            onClick={() => navigate("/watchlist")}
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.4)",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "500",
-              transition: "background 0.2s"
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
-          >
-            ← Watchlist
-          </button>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.4)",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "500",
-              transition: "background 0.2s"
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
-            onMouseLeave={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}
-          >
-            Log out
-          </button>
-        </div>
-      </div>
+    <AppShell active="analytics" user={user} variant="wrapped" onSignOut={handleLogout}>
+      <main className="wrapped-page">
+        <div className="wrapped-glow wrapped-glow--primary" aria-hidden="true" />
+        <div className="wrapped-glow wrapped-glow--secondary" aria-hidden="true" />
 
-      {/* Main content */}
-      <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 20px" }}>
-        {/* Date range filter */}
-        <div style={{
-          background: "white",
-          borderRadius: "12px",
-          padding: "20px",
-          marginBottom: "32px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          display: "flex",
-          gap: "16px",
-          alignItems: "flex-end",
-          flexWrap: "wrap"
-        }}>
-          <div>
-            <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px", color: "#666" }}>
-              From Year
-            </label>
-            <input
-              type="number"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              min="2000"
-              max="2100"
-              style={{
-                padding: "10px 12px",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontFamily: "inherit",
-                width: "120px"
-              }}
-            />
-          </div>
+        <section className="wrapped-hero">
+          <p className="eyebrow wrapped-hero__eyebrow">Your story in {dateTo}</p>
+          <h1 className="wrapped-hero__title">
+            The scripts you
+            <br />
+            <span>lived through.</span>
+          </h1>
 
-          <div>
-            <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px", color: "#666" }}>
-              To Year
-            </label>
-            <input
-              type="number"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              min="2000"
-              max="2100"
-              style={{
-                padding: "10px 12px",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontFamily: "inherit",
-                width: "120px"
-              }}
-            />
+          <div className="wrapped-filters">
+            <div className="glass-card wrapped-range">
+              <label>
+                <span>From</span>
+                <input
+                  type="number"
+                  min={FIRST_YEAR}
+                  max="2100"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+              </label>
+              <span className="wrapped-range__divider" />
+              <label>
+                <span>To</span>
+                <input
+                  type="number"
+                  min={FIRST_YEAR}
+                  max="2100"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                />
+              </label>
+            </div>
+            <p className="wrapped-filters__count">Showing {filteredDramas.length} dramas</p>
           </div>
-
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: "13px", color: "#999", margin: "0" }}>
-              📊 Showing {filteredDramas.length} dramas
-            </p>
-          </div>
-        </div>
+        </section>
 
         {loading ? (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <div style={{
-              display: "inline-block",
-              width: "40px",
-              height: "40px",
-              border: "4px solid #f0f0f0",
-              borderTop: "4px solid #667eea",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite"
-            }} />
-            <p style={{ fontSize: "16px", color: "#999", marginTop: "16px" }}>Loading analytics...</p>
-            <style>{`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            `}</style>
+          <div className="wrapped-state">
+            <div className="loading-reel" />
+            <h3 className="headline-md">Loading analytics…</h3>
           </div>
         ) : (
           <>
-            {/* Stats cards */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "16px",
-              marginBottom: "32px"
-            }}>
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-              }}>
-                <p style={{ fontSize: "13px", color: "#999", margin: "0 0 8px", fontWeight: "600", textTransform: "uppercase" }}>
-                  Total Dramas
-                </p>
-                <p style={{ fontSize: "32px", fontWeight: "700", color: "#667eea", margin: "0" }}>
-                  {totalDramas}
-                </p>
-              </div>
+            <section className="wrapped-bento" aria-label="Headline statistics">
+              <article className="glass-card wrapped-bento__large">
+                <span className="wrapped-bento__aura wrapped-bento__aura--primary" aria-hidden="true" />
+                <span className="material-symbols-outlined wrapped-bento__icon" aria-hidden="true">movie</span>
+                <div>
+                  <h2>Total dramas</h2>
+                  <p className="wrapped-figure wrapped-figure--primary">{totalDramas}</p>
+                </div>
+              </article>
 
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-              }}>
-                <p style={{ fontSize: "13px", color: "#999", margin: "0 0 8px", fontWeight: "600", textTransform: "uppercase" }}>
-                  Avg Rating
-                </p>
-                <p style={{ fontSize: "32px", fontWeight: "700", color: "#ffc107", margin: "0" }}>
-                  ★ {avgRating}
-                </p>
-              </div>
+              <article className="glass-card wrapped-bento__large">
+                <span className="wrapped-bento__aura wrapped-bento__aura--secondary" aria-hidden="true" />
+                <span className="material-symbols-outlined wrapped-bento__icon wrapped-bento__icon--rose" aria-hidden="true">
+                  star_half
+                </span>
+                <div>
+                  <h2>Avg rating</h2>
+                  <p className="wrapped-figure wrapped-figure--secondary">{avgRating}</p>
+                </div>
+              </article>
 
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-              }}>
-                <p style={{ fontSize: "13px", color: "#999", margin: "0 0 8px", fontWeight: "600", textTransform: "uppercase" }}>
-                  Top Genre
-                </p>
-                <p style={{ fontSize: "24px", fontWeight: "700", color: "#764ba2", margin: "0" }}>
-                  {topGenre}
-                </p>
-              </div>
+              <article className="glass-card wrapped-bento__small">
+                <span className="wrapped-bento__badge wrapped-bento__badge--mint">
+                  <span className="material-symbols-outlined" aria-hidden="true">theater_comedy</span>
+                </span>
+                <div>
+                  <p className="wrapped-bento__label">Top genre</p>
+                  <p className="wrapped-bento__value">{topGenre}</p>
+                </div>
+              </article>
 
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-              }}>
-                <p style={{ fontSize: "13px", color: "#999", margin: "0 0 8px", fontWeight: "600", textTransform: "uppercase" }}>
-                  Rated Dramas
-                </p>
-                <p style={{ fontSize: "32px", fontWeight: "700", color: "#43e97b", margin: "0" }}>
-                  {filteredDramas.filter(d => d.rating).length}
-                </p>
-              </div>
-            </div>
+              <article className="glass-card wrapped-bento__small">
+                <span className="wrapped-bento__badge wrapped-bento__badge--lavender">
+                  <span className="material-symbols-outlined" aria-hidden="true">rate_review</span>
+                </span>
+                <div>
+                  <p className="wrapped-bento__label">Rated dramas</p>
+                  <p className="wrapped-bento__value">
+                    {ratedDramas.length} <em>items</em>
+                  </p>
+                </div>
+              </article>
 
-            {/* Charts */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(500px, 1fr))", gap: "24px" }}>
-              {/* Bar Chart - Dramas per year */}
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-              }}>
-                <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 16px", color: "#1a1a1a" }}>
-                  📺 Dramas Watched Per Year
-                </h3>
+              <article className="glass-card wrapped-bento__small">
+                <span className="wrapped-bento__badge wrapped-bento__badge--rose">
+                  <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
+                </span>
+                <div>
+                  <p className="wrapped-bento__label">Busiest year</p>
+                  <p className="wrapped-bento__value">
+                    {peakYear ? peakYear.year : "—"}{" "}
+                    <em>{peakYear ? `${peakYear.count} titles` : "no data"}</em>
+                  </p>
+                </div>
+              </article>
+            </section>
+
+            <section className="wrapped-charts">
+              <article className="glass-card wrapped-chart">
+                <header>
+                  <div>
+                    <h3 className="headline-md">Dramas per year</h3>
+                    <p>Your viewing trend since {dateFrom}</p>
+                  </div>
+                  <span className="material-symbols-outlined" aria-hidden="true">monitoring</span>
+                </header>
                 {yearChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={yearChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="year" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#667eea" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
+                      <XAxis dataKey="year" stroke="rgba(255,255,255,0.4)" tickLine={false} axisLine={false} />
+                      <YAxis stroke="rgba(255,255,255,0.4)" tickLine={false} axisLine={false} allowDecimals={false} />
+                      <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(216,180,254,0.08)" }} />
+                      <Bar dataKey="count" radius={[12, 12, 0, 0]}>
+                        {yearChartData.map((entry) => (
+                          <Cell
+                            key={entry.year}
+                            fill={entry.year === dateTo ? "#d8b4fe" : "#6f5092"}
+                          />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <p style={{ color: "#999", textAlign: "center", padding: "20px" }}>No data for selected range</p>
+                  <p className="wrapped-chart__empty">No data for selected range</p>
                 )}
-              </div>
+              </article>
 
-              {/* Pie Chart - Genre breakdown */}
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-              }}>
-                <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 16px", color: "#1a1a1a" }}>
-                  🎬 Genre Breakdown
-                </h3>
-                {genreChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={genreChartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, value }) => `${name} (${value})`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {genreChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
+              <article className="glass-card wrapped-chart">
+                <header>
+                  <div>
+                    <h3 className="headline-md">Genre soul</h3>
+                    <p>The flavors you crave the most</p>
+                  </div>
+                  <span className="material-symbols-outlined" aria-hidden="true">pie_chart</span>
+                </header>
+
+                {genreTotal > 0 ? (
+                  <div className="genre-soul">
+                    <div className="genre-soul__donut" style={{ background: donutGradient }}>
+                      <div className="genre-soul__core">
+                        <span>Core</span>
+                        <strong>{topGenre}</strong>
+                      </div>
+                    </div>
+                    <ul className="genre-soul__legend">
+                      {legendGenres.map((entry, index) => (
+                        <li key={entry.name}>
+                          <span className="genre-soul__swatch" style={{ background: COLORS[index % COLORS.length] }} />
+                          <span className="genre-soul__name">{entry.name}</span>
+                          <span className="genre-soul__value">
+                            {entry.value} ({Math.round((entry.value / genreTotal) * 100)}%)
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : (
-                  <p style={{ color: "#999", textAlign: "center", padding: "20px" }}>No data for selected range</p>
+                  <p className="wrapped-chart__empty">No genres recorded in this range</p>
                 )}
-              </div>
+              </article>
 
-              {/* Line Chart - Average rating per year */}
-              <div style={{
-                background: "white",
-                borderRadius: "12px",
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                gridColumn: "1 / -1"
-              }}>
-                <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 16px", color: "#1a1a1a" }}>
-                  ⭐ Average Rating Over Time
-                </h3>
+              <article className="glass-card wrapped-chart wrapped-chart--wide">
+                <header>
+                  <div>
+                    <h3 className="headline-md">Average rating over time</h3>
+                    <p>How generous you were, year by year</p>
+                  </div>
+                  <span className="material-symbols-outlined" aria-hidden="true">show_chart</span>
+                </header>
                 {yearChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={yearChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="year" />
-                      <YAxis domain={[0, 10]} />
-                      <Tooltip />
-                      <Legend />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
+                      <XAxis dataKey="year" stroke="rgba(255,255,255,0.4)" tickLine={false} axisLine={false} />
+                      <YAxis domain={[0, 10]} stroke="rgba(255,255,255,0.4)" tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "rgba(216,180,254,0.3)" }} />
                       <Line
                         type="monotone"
                         dataKey="avgRating"
-                        stroke="#ffc107"
-                        strokeWidth={2}
-                        connectNulls
-                        name="Avg Rating"
-                        dot={{ fill: "#ffc107", r: 5 }}
+                        name="Average rating"
+                        stroke="#ffa6b1"
+                        strokeWidth={3}
+                        dot={{ fill: "#ffa6b1", r: 5, strokeWidth: 0 }}
+                        activeDot={{ r: 7 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <p style={{ color: "#999", textAlign: "center", padding: "20px" }}>No data for selected range</p>
+                  <p className="wrapped-chart__empty">No data for selected range</p>
                 )}
+              </article>
+            </section>
+
+            <section className="wrapped-idols" aria-label="Most watched actors">
+              <header className="wrapped-idols__header">
+                <div>
+                  <p className="eyebrow wrapped-hero__eyebrow">Your biggest idol</p>
+                  <h2 className="headline-lg">
+                    {biggestIdol ? biggestIdol.name : "No cast data yet"}
+                  </h2>
+                </div>
+                <span className="material-symbols-outlined" aria-hidden="true">workspace_premium</span>
+              </header>
+
+              {biggestIdol ? (
+                <div className="wrapped-idols__body">
+                  <article className="glass-card idol-spotlight">
+                    <div className="idol-spotlight__portrait">
+                      {biggestIdol.profile_path ? (
+                        <img src={tmdbImage(biggestIdol.profile_path, "w342")} alt={biggestIdol.name} />
+                      ) : (
+                        <span>{biggestIdol.name[0]}</span>
+                      )}
+                    </div>
+                    <div className="idol-spotlight__stats">
+                      <p className="wrapped-figure wrapped-figure--primary">{biggestIdol.count}</p>
+                      <p className="idol-spotlight__label">
+                        {biggestIdol.count === 1 ? "drama together" : "dramas together"}
+                      </p>
+                      {biggestIdol.avgRating ? (
+                        <p className="idol-spotlight__rating">
+                          <span className="material-symbols-outlined is-filled" aria-hidden="true">star</span>
+                          {biggestIdol.avgRating} average from you
+                        </p>
+                      ) : null}
+                      <p className="idol-spotlight__titles">
+                        {biggestIdol.titles.slice(0, 4).join(" · ")}
+                        {biggestIdol.titles.length > 4 ? ` +${biggestIdol.titles.length - 4} more` : ""}
+                      </p>
+                    </div>
+                  </article>
+
+                  {runnersUp.length > 0 ? (
+                    <ol className="idol-rank">
+                      {runnersUp.map((actor, index) => (
+                        <li key={actor.name} className="glass-card idol-rank__row">
+                          <span className="idol-rank__place">{index + 2}</span>
+                          <span className="idol-rank__face">
+                            {actor.profile_path ? (
+                              <img src={tmdbImage(actor.profile_path, "w185")} alt="" loading="lazy" />
+                            ) : (
+                              <b>{actor.name[0]}</b>
+                            )}
+                          </span>
+                          <span className="idol-rank__name">{actor.name}</span>
+                          <span className="idol-rank__count">{actor.count}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="wrapped-chart__empty">
+                  Add cast data to your dramas to see who you watch most — open a drama, choose
+                  Edit, then “Fetch cast &amp; episodes”.
+                </p>
+              )}
+            </section>
+
+            <section className="wrapped-cta">
+              <h2 className="headline-lg">Ready to show off your taste?</h2>
+              <div className="wrapped-cta__actions">
+                <button className="btn btn--primary" type="button" onClick={handleShare}>
+                  <span className="material-symbols-outlined" aria-hidden="true">share</span>
+                  Share my year
+                </button>
+                <button className="btn wrapped-cta__ghost" type="button" onClick={() => navigate("/watchlist")}>
+                  <span className="material-symbols-outlined" aria-hidden="true">grid_view</span>
+                  Back to watchlist
+                </button>
               </div>
-            </div>
+            </section>
           </>
         )}
-      </div>
-    </div>
+      </main>
+    </AppShell>
   );
 }

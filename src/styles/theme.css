@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light;
+
+  --font-body: "Manrope", sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
+
+  --text-display-lg: 2rem;
+  --text-display-lg-mobile: 1.75rem;
+  --text-headline-lg: 1.5rem;
+  --text-headline-md: 1.25rem;
+  --text-body-lg: 1.125rem;
+  --text-body-md: 1rem;
+  --text-label-md: 0.875rem;
+
+  --primary: #6f5092;
+  --on-primary: #ffffff;
+  --primary-container: #d8b4fe;
+  --on-primary-container: #2d2a5b;
+  --primary-fixed: #eadcff;
+  --primary-fixed-dim: #d8b4fe;
+  --on-primary-fixed-variant: #4e3471;
+
+  --secondary: #8f4953;
+  --secondary-container: #fda4af;
+  --tertiary: #35675c;
+  --tertiary-fixed-dim: #82b5a8;
+  --error: #ba1a1a;
+
+  --background: #f9ecff;
+  --on-background: #1e1b4b;
+  --surface: #fffbff;
+  --on-surface: #1e1b4b;
+  --on-surface-variant: #444173;
+  --inverse-surface: #1e1b4b;
+  --surface-container-low: #f3eeff;
+  --surface-container: #e3dfff;
+  --surface-container-highest: #c4c1fb;
+  --outline: #7471a7;
+  --outline-variant: #c4c1fb;
+  --wrapped-bg: #1e1b4b;
+
+  --margin-sm: 0.5rem;
+  --margin-md: 1rem;
+  --margin-lg: 1.5rem;
+  --gutter: 1.5rem;
+  --container-padding: 1.25rem;
+  --content-max: 1200px;
+
+  --radius-sm: 0.5rem;
+  --radius: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+  --radius-full: 9999px;
+}
+
+@media (max-width: 600px) {
+  :root {
+    --container-padding: 1rem;
+    --gutter: 1rem;
+  }
+}

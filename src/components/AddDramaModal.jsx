@@ -1,18 +1,28 @@
 import { useState } from "react";
 import { addDrama } from "../lib/supabase";
+import { extractMainCast } from "../lib/tmdb";
+import "./Modal.css";
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
 
-export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
+export default function AddDramaModal({ userId, initialResult, onDramaAdded, onClose }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [selectedResult, setSelectedResult] = useState(null);
+  // Arriving from the trending banner skips straight to the details form.
+  const [selectedResult, setSelectedResult] = useState(initialResult || null);
   const [status, setStatus] = useState("completed");
   const [yearWatched, setYearWatched] = useState(new Date().getFullYear().toString());
   const [rating, setRating] = useState("");
   const [review, setReview] = useState("");
+  const [totalEpisodes, setTotalEpisodes] = useState(
+    initialResult?.number_of_episodes ? String(initialResult.number_of_episodes) : ""
+  );
+  const [mainCast, setMainCast] = useState(
+    initialResult?.credits ? extractMainCast(initialResult) : []
+  );
+  const [episodesWatched, setEpisodesWatched] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const searchTMDB = async (e) => {
@@ -45,9 +55,29 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
     setLoading(false);
   };
 
+  // TMDB search results omit the episode count, so pull it from the details
+  // endpoint. A failure here is not fatal — the count stays editable by hand.
+  const fetchShowExtras = async (result) => {
+    try {
+      const response = await fetch(
+        `https://api.themoviedb.org/3/tv/${result.id}?api_key=${TMDB_API_KEY}&language=en-US&append_to_response=credits`
+      );
+      const details = await response.json();
+      if (details?.number_of_episodes) {
+        setTotalEpisodes(String(details.number_of_episodes));
+      }
+      setMainCast(extractMainCast(details));
+    } catch {
+      // Leave the fields blank; they stay editable by hand.
+    }
+  };
+
   const selectResult = async (result) => {
     setSelectedResult(result);
     setError("");
+    setTotalEpisodes("");
+    setMainCast([]);
+    await fetchShowExtras(result);
   };
 
   const handleAddDrama = async () => {
@@ -83,6 +113,8 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
       ? `https://image.tmdb.org/t/p/w500${selectedResult.poster_path}`
       : null;
 
+    const parsedTotalEpisodes = totalEpisodes ? parseInt(totalEpisodes) : null;
+
     const { data, error } = await addDrama({
       user_id: userId,
       title: selectedResult.name || selectedResult.title,
@@ -94,7 +126,12 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
       year_watched: yearWatched,
       status: status,
       rating: rating ? parseInt(rating) : null,
-      review: review || null
+      review: review || null,
+      main_cast: mainCast.length > 0 ? mainCast : null,
+      total_episodes: parsedTotalEpisodes,
+      episodes_watched: status === "completed"
+        ? parsedTotalEpisodes || 0
+        : episodesWatched ? parseInt(episodesWatched) : 0
     });
 
     if (error) {
@@ -106,238 +143,156 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
   };
 
   return (
-    <div style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "flex-end",
-      zIndex: 1000,
-      animation: "slideUp 0.3s ease"
-    }}>
-      <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-      `}</style>
-
-      <div style={{
-        background: "white",
-        borderRadius: "24px 24px 0 0",
-        padding: "24px 20px",
-        width: "100%",
-        maxHeight: "90vh",
-        overflowY: "auto",
-        animation: "slideUp 0.3s ease"
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "20px", fontWeight: "600", margin: "0" }}>Add Drama</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close add drama modal"
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "24px",
-              cursor: "pointer",
-              color: "#999"
-            }}
-          >
-            ✕
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Add drama">
+      <div className="modal-sheet">
+        <div className="modal-sheet__header">
+          <div>
+            <span className="eyebrow">New entry</span>
+            <h2>{selectedResult ? "Drama details" : "Add drama"}</h2>
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Close add drama modal" type="button">
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
 
         {!selectedResult ? (
           <>
-            {/* Search form */}
-            <form onSubmit={searchTMDB} style={{ marginBottom: "24px" }}>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for a drama..."
-                  style={{
-                    flex: 1,
-                    padding: "12px 14px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    color: "white",
-                    border: "none",
-                    padding: "12px 20px",
-                    borderRadius: "8px",
-                    cursor: loading ? "not-allowed" : "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    opacity: loading ? 0.7 : 1
-                  }}
-                >
-                  {loading ? (
-                    <span>🔍 Searching...</span>
-                  ) : (
-                    <span>Search</span>
-                  )}
-                </button>
-              </div>
+            <form className="modal-search" onSubmit={searchTMDB}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for a drama..."
+                aria-label="Search for a drama"
+              />
+              <button className="btn btn--primary" type="submit" disabled={loading}>
+                {loading ? "Searching…" : "Search"}
+              </button>
             </form>
 
             {error && (
-              <div style={{
-                background: "#ffe6e6",
-                color: "#d32f2f",
-                padding: "10px 12px",
-                borderRadius: "8px",
-                fontSize: "13px",
-                marginBottom: "16px",
-                border: "1px solid #ffcccc"
-              }}>
-                {error}
+              <div className="error-banner" role="alert" style={{ marginBottom: "var(--margin-md)" }}>
+                <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                <span>{error}</span>
               </div>
             )}
 
-            {/* Search results */}
             {searchResults.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div className="result-list">
                 {searchResults.map(result => (
-                  <div
+                  <button
                     key={result.id}
+                    type="button"
+                    className="result-card"
                     onClick={() => selectResult(result)}
-                    style={{
-                      background: "white",
-                      border: "1px solid #ddd",
-                      borderRadius: "12px",
-                      padding: "12px",
-                      cursor: "pointer",
-                      display: "flex",
-                      gap: "12px",
-                      transition: "all 0.2s"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "#667eea";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(102,126,234,0.1)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "#ddd";
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
                   >
                     {result.poster_path ? (
                       <img
+                        className="result-card__poster"
                         src={`https://image.tmdb.org/t/p/w92${result.poster_path}`}
-                        alt={result.name}
-                        style={{ width: "50px", height: "75px", borderRadius: "4px", objectFit: "cover" }}
+                        alt=""
                       />
                     ) : (
-                      <div style={{
-                        width: "50px",
-                        height: "75px",
-                        borderRadius: "4px",
-                        background: "#f0f0f0"
-                      }} />
+                      <div className="result-card__poster result-card__poster--empty" />
                     )}
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: "14px", fontWeight: "600", margin: "0 0 4px", color: "#1a1a1a" }}>
-                        {result.name || result.title}
-                      </p>
-                      <p style={{ fontSize: "12px", color: "#999", margin: "0 0 6px", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                        {result.overview}
-                      </p>
-                      <p style={{ fontSize: "11px", color: "#bbb", margin: "0" }}>
+                    <div className="result-card__body">
+                      <p className="result-card__title">{result.name || result.title}</p>
+                      <p className="result-card__overview">{result.overview}</p>
+                      <p className="result-card__year">
                         {result.first_air_date ? new Date(result.first_air_date).getFullYear() : "Year unknown"}
                       </p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </>
         ) : (
           <>
-            {/* Drama details form */}
-            <div style={{ background: "#f9f9f9", borderRadius: "12px", padding: "16px", marginBottom: "24px" }}>
-              <div style={{ display: "flex", gap: "12px" }}>
-                {selectedResult.poster_path ? (
-                  <img
-                    src={`https://image.tmdb.org/t/p/w92${selectedResult.poster_path}`}
-                    alt={selectedResult.name}
-                    style={{ width: "60px", height: "90px", borderRadius: "8px", objectFit: "cover" }}
-                  />
-                ) : (
-                  <div style={{
-                    width: "60px",
-                    height: "90px",
-                    borderRadius: "8px",
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                  }} />
-                )}
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: "15px", fontWeight: "600", margin: "0 0 4px" }}>
-                    {selectedResult.name || selectedResult.title}
+            <div className="modal-summary">
+              {selectedResult.poster_path ? (
+                <img
+                  className="modal-summary__poster"
+                  src={`https://image.tmdb.org/t/p/w185${selectedResult.poster_path}`}
+                  alt=""
+                />
+              ) : (
+                <div className="modal-summary__poster modal-summary__poster--empty" />
+              )}
+              <div className="modal-summary__body">
+                <p className="modal-summary__title">{selectedResult.name || selectedResult.title}</p>
+                <p className="modal-summary__meta">
+                  {selectedResult.first_air_date
+                    ? new Date(selectedResult.first_air_date).getFullYear()
+                    : "Year unknown"}
+                  {totalEpisodes ? ` • ${totalEpisodes} episodes` : ""}
+                </p>
+                {mainCast.length > 0 ? (
+                  <p className="modal-summary__meta">
+                    Starring {mainCast.slice(0, 3).map((person) => person.name).join(", ")}
                   </p>
-                  <p style={{ fontSize: "12px", color: "#999", margin: "0" }}>
-                    {selectedResult.first_air_date ? new Date(selectedResult.first_air_date).getFullYear() : "Year unknown"}
-                  </p>
-                </div>
+                ) : null}
               </div>
             </div>
 
-            {/* Form fields */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Status</label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                >
-                  <option value="completed">Completed</option>
-                  <option value="watching">Currently watching</option>
-                  <option value="want_to_watch">Want to watch</option>
-                </select>
+            <div className="modal-form">
+              <div className="modal-form__grid">
+                <div className="field">
+                  <label htmlFor="add-drama-status">Status</label>
+                  <select
+                    id="add-drama-status"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                  >
+                    <option value="completed">Completed</option>
+                    <option value="watching">Currently watching</option>
+                    <option value="want_to_watch">Want to watch</option>
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="add-drama-year">Year watched</label>
+                  <input
+                    id="add-drama-year"
+                    type="number"
+                    value={yearWatched}
+                    onChange={(e) => setYearWatched(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Year watched</label>
-                <input
-                  type="number"
-                  value={yearWatched}
-                  onChange={(e) => setYearWatched(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
-                />
+              <div className="modal-form__grid">
+                <div className="field">
+                  <label htmlFor="add-drama-total-episodes">Total episodes</label>
+                  <input
+                    id="add-drama-total-episodes"
+                    type="number"
+                    min="0"
+                    value={totalEpisodes}
+                    onChange={(e) => setTotalEpisodes(e.target.value)}
+                    placeholder="From TMDb"
+                  />
+                </div>
+
+                {/* Completed means every episode — nothing to ask for. */}
+                {status === "completed" ? null : (
+                  <div className="field">
+                    <label htmlFor="add-drama-episodes-watched">Episodes watched</label>
+                    <input
+                      id="add-drama-episodes-watched"
+                      type="number"
+                      min="0"
+                      max={totalEpisodes || undefined}
+                      value={episodesWatched}
+                      onChange={(e) => setEpisodesWatched(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label htmlFor="add-drama-rating" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Rating (1-10)</label>
+              <div className="field">
+                <label htmlFor="add-drama-rating">Rating (1-10)</label>
                 <input
                   id="add-drama-rating"
                   type="number"
@@ -346,90 +301,32 @@ export default function AddDramaModal({ userId, onDramaAdded, onClose }) {
                   value={rating}
                   onChange={(e) => setRating(e.target.value)}
                   placeholder="Optional"
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box"
-                  }}
                 />
               </div>
 
-              <div>
-                <label htmlFor="add-drama-review" style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>Review</label>
+              <div className="field">
+                <label htmlFor="add-drama-review">Review</label>
                 <textarea
                   id="add-drama-review"
                   value={review}
                   onChange={(e) => setReview(e.target.value)}
                   placeholder="Add your thoughts..."
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                    minHeight: "80px"
-                  }}
                 />
               </div>
 
               {error && (
-                <div style={{
-                  background: "#ffe6e6",
-                  color: "#d32f2f",
-                  padding: "10px 12px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  border: "1px solid #ffcccc"
-                }}>
-                  {error}
+                <div className="error-banner" role="alert">
+                  <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                  <span>{error}</span>
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => setSelectedResult(null)}
-                  style={{
-                    flex: 1,
-                    background: "white",
-                    color: "#666",
-                    border: "1px solid #ddd",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600"
-                  }}
-                >
+              <div className="modal-actions">
+                <button className="btn btn--ghost" type="button" onClick={() => setSelectedResult(null)}>
                   Back
                 </button>
-                <button
-                  onClick={handleAddDrama}
-                  disabled={submitting}
-                  style={{
-                    flex: 1,
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    color: "white",
-                    border: "none",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    opacity: submitting ? 0.7 : 1
-                  }}
-                >
-                  {submitting ? (
-                    <span>⏳ Adding...</span>
-                  ) : (
-                    <span>Add to watchlist</span>
-                  )}
+                <button className="btn btn--primary" type="button" onClick={handleAddDrama} disabled={submitting}>
+                  {submitting ? "Adding…" : "Add to watchlist"}
                 </button>
               </div>
             </div>

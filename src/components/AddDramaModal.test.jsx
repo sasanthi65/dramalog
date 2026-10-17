@@ -70,6 +70,61 @@ describe("AddDramaModal", () => {
     expect(onDramaAdded).toHaveBeenCalledWith(savedDrama);
   });
 
+  it("hides episodes watched for a completed drama and records it as fully watched", async () => {
+    fetch.mockImplementation(async (url) =>
+      String(url).includes("/search/tv")
+        ? { json: async () => ({ results: [tmdbResult] }) }
+        : { json: async () => ({ number_of_episodes: 16 }) }
+    );
+    addDrama.mockResolvedValue({ data: [{ id: "saved-1" }], error: null });
+
+    render(
+      <AddDramaModal userId="user-1" onDramaAdded={vi.fn()} onClose={vi.fn()} />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Search for a drama..."), {
+      target: { value: "Lovely Runner" },
+    });
+    fireEvent.click(screen.getByText("Search"));
+    fireEvent.click(await screen.findByText("Lovely Runner"));
+
+    // Status defaults to completed, so progress is not asked for.
+    await waitFor(() => {
+      expect(screen.getByLabelText("Total episodes")).toHaveValue(16);
+    });
+    expect(screen.queryByLabelText("Episodes watched")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Add to watchlist"));
+
+    await waitFor(() => {
+      expect(addDrama).toHaveBeenCalledWith(
+        expect.objectContaining({ total_episodes: 16, episodes_watched: 16 })
+      );
+    });
+  });
+
+  it("asks for progress once the status is not completed", async () => {
+    fetch.mockImplementation(async (url) =>
+      String(url).includes("/search/tv")
+        ? { json: async () => ({ results: [tmdbResult] }) }
+        : { json: async () => ({ number_of_episodes: 16 }) }
+    );
+
+    render(
+      <AddDramaModal userId="user-1" onDramaAdded={vi.fn()} onClose={vi.fn()} />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Search for a drama..."), {
+      target: { value: "Lovely Runner" },
+    });
+    fireEvent.click(screen.getByText("Search"));
+    fireEvent.click(await screen.findByText("Lovely Runner"));
+
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "watching" } });
+
+    expect(screen.getByLabelText("Episodes watched")).toBeInTheDocument();
+  });
+
   it("shows an error when searching without a title", () => {
     render(
       <AddDramaModal
